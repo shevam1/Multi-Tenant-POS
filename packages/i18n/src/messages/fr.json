@@ -1,0 +1,18 @@
+{
+  "common": {
+    "book": "Réserver",
+    "bookNow": "Réserver maintenant",
+    "continue": "Continuer",
+    "back": "Retour",
+    "language": "Langue"
+  },
+  "booking": {
+    "title": "Prendre rendez-vous",
+    "selectService": "Choisir un service",
+    "selectPet": "Choisir votre animal",
+    "newCustomer": "Je suis un nouveau client",
+    "returningCustomer": "J'ai déjà réservé",
+    "submit": "Demander un rendez-vous",
+    "pendingNotice": "Votre demande a été reçue et est en attente d'approbation."
+  }
+}

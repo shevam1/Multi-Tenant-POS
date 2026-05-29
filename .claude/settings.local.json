@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"=== POS dir ===\" && ls -la /Users/shevam/Documents/POS 2>/dev/null; echo \"=== Documents docx ===\" && ls -la /Users/shevam/Documents/*.docx 2>/dev/null; echo \"=== which tools ===\" && which pandoc python3 2>/dev/null)",
+      "Bash(python3 -)"
+    ]
+  }
+}

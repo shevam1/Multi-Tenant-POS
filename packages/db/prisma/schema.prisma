@@ -1,0 +1,546 @@
+// OmniPOS database schema.
+//
+// One shared core powers every tenant; the Pet Grooming domain module adds
+// its specifics on top. Every tenant-scoped table carries `tenantId` (and
+// `storeId` where relevant) and is protected by Postgres Row-Level Security
+// (see prisma/sql/rls_policies.sql). The DB role used by the app is NOT a
+// superuser and tables FORCE RLS, so isolation holds even for the table owner.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+/// Industry vertical a tenant runs. Drives which domain module is loaded.
+enum IndustryType {
+  PET_GROOMING
+  RESTAURANT
+}
+
+/// System actors from the functional specs (RBAC).
+enum UserRole {
+  CUSTOMER
+  CALL_CENTER_AGENT
+  RECEPTION
+  GROOMER
+  STORE_MANAGER
+  FRANCHISE_HQ_ADMIN
+}
+
+/// Catalog item kind.
+enum CatalogItemKind {
+  PACKAGE
+  ADDON
+  RETAIL
+}
+
+/// Dynamic pricing rule categories (spec section 4).
+enum PricingRuleType {
+  BREED_SIZE
+  LOCATION_TIER
+  PEAK_SURCHARGE
+  HANDLING_PREMIUM
+}
+
+enum PricingAdjustmentKind {
+  MULTIPLIER
+  FLAT
+}
+
+/// Booking lifecycle state machine.
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  LATE
+}
+
+/// Where a booking originated.
+enum BookingSource {
+  WEB
+  POS
+  CALL_CENTER
+}
+
+/// Grooming workflow stages (timestamped on the job card).
+enum WorkflowStage {
+  CHECK_IN
+  BEFORE_PHOTOS
+  BATH
+  DRYING
+  STYLING
+  NAILS
+  QUALITY_CHECK
+  AFTER_PHOTOS
+  READY
+}
+
+enum ConsentChannel {
+  SMS
+  EMAIL
+}
+
+enum TenderType {
+  CASH
+  CARD
+  MOBILE_WALLET
+  GIFT_CARD
+  STATEMENT_CREDIT
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  VOID
+}
+
+enum InventoryCategory {
+  RETAIL
+  CONSUMABLE
+}
+
+// ============================================================
+// Core: tenancy & identity
+// ============================================================
+
+model Tenant {
+  id        String       @id @default(cuid())
+  name      String
+  slug      String       @unique
+  industry  IndustryType
+  /// Per-tenant branding for franchise sites: { logoUrl, primaryColor, ... }
+  theme     Json         @default("{}")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  stores       Store[]
+  users        User[]
+  customers    Customer[]
+  pets         Pet[]
+  catalogItems CatalogItem[]
+  pricingRules PricingRule[]
+  bookings     Booking[]
+  invoices     Invoice[]
+  inventory    InventoryItem[]
+  auditLogs    AuditLog[]
+
+  @@map("tenant")
+}
+
+model Store {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  /// CA province code: ON, BC, QC, AB, ...
+  province  String
+  timezone  String   @default("America/Toronto")
+  addressLine String?
+  city      String?
+  postalCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users     User[]
+  bookings  Booking[]
+  invoices  Invoice[]
+  inventory InventoryItem[]
+
+  @@index([tenantId])
+  @@map("store")
+}
+
+/// Staff and admin accounts. Customers authenticate separately (Customer model).
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  storeId      String?
+  email        String
+  passwordHash String
+  fullName     String
+  role         UserRole
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("app_user")
+}
+
+/// Append-only audit trail of sensitive staff actions (spec section 2).
+model AuditLog {
+  id          String   @id @default(cuid())
+  tenantId    String
+  actorUserId String?
+  action      String
+  entityType  String?
+  entityId    String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_log")
+}
+
+// ============================================================
+// CRM: customers, pets, consent
+// ============================================================
+
+model Customer {
+  id              String   @id @default(cuid())
+  tenantId        String
+  fullName        String
+  /// Contact fields are masked from the GROOMER role (client-poaching protection).
+  phone           String?
+  email           String?
+  addressLine     String?
+  city            String?
+  postalCode      String?
+  membershipTier  String?
+  preferredStoreId String?
+  emergencyContact String?
+  /// Colored tags surfaced on cards (e.g. VIP, Cash Only).
+  tags            String[] @default([])
+  /// Prepaid ledger balance auto-applied at checkout (statement credits).
+  statementCreditCents Int @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pets     Pet[]
+  bookings Booking[]
+  consents CommunicationConsent[]
+
+  @@index([tenantId])
+  @@index([tenantId, phone])
+  @@map("customer")
+}
+
+model Pet {
+  id                String   @id @default(cuid())
+  tenantId          String
+  customerId        String
+  name              String
+  species           String   @default("DOG")
+  breed             String?
+  dateOfBirth       DateTime?
+  gender            String?
+  weightKg          Float?
+  photoUrl          String?
+  /// Colored behavior tags (e.g. Aggressive).
+  tags              String[] @default([])
+  allergies         String?
+  medicalNotes      String?
+  preferredGroomerId String?
+  /// Coat style record: clip style, blade sizes, products, behavior notes.
+  groomNotes        String?
+  /// Flexible domain-specific fields validated by the active module.
+  attributes        Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vaccinations   VaccinationRecord[]
+  bookings       Booking[]
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@map("pet")
+}
+
+model VaccinationRecord {
+  id            String    @id @default(cuid())
+  tenantId      String
+  petId         String
+  vaccineType   String
+  administeredAt DateTime?
+  expiresAt     DateTime?
+  documentUrl   String?
+  createdAt     DateTime  @default(now())
+
+  pet Pet @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([petId])
+  @@map("vaccination_record")
+}
+
+/// CASL consent ledger — immutable record of opt-in/opt-out.
+model CommunicationConsent {
+  id         String         @id @default(cuid())
+  tenantId   String
+  customerId String
+  channel    ConsentChannel
+  consentedAt DateTime?
+  revokedAt  DateTime?
+  source     String?
+  ipAddress  String?
+  createdAt  DateTime       @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@map("communication_consent")
+}
+
+// ============================================================
+// Catalog & pricing
+// ============================================================
+
+model CatalogItem {
+  id            String          @id @default(cuid())
+  tenantId      String
+  kind          CatalogItemKind
+  name          String
+  description   String?
+  basePriceCents Int
+  durationMin   Int?
+  active        Boolean         @default(true)
+  /// e.g. { sku, calories, allergens } — module-specific.
+  attributes    Json            @default("{}")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bookingLines BookingLineItem[]
+
+  @@index([tenantId])
+  @@map("catalog_item")
+}
+
+model PricingRule {
+  id         String                @id @default(cuid())
+  tenantId   String
+  type       PricingRuleType
+  /// Match criteria, e.g. { sizeClass: "LARGE" } or { tier: "GOLD" }.
+  match      Json                  @default("{}")
+  adjustment PricingAdjustmentKind
+  /// MULTIPLIER: 1.25 = +25%. FLAT: value is cents.
+  value      Float
+  active     Boolean               @default(true)
+  createdAt  DateTime              @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("pricing_rule")
+}
+
+// ============================================================
+// Booking, workflow & consents
+// ============================================================
+
+model Booking {
+  id               String        @id @default(cuid())
+  tenantId         String
+  storeId          String
+  customerId       String
+  petId            String?
+  status           BookingStatus @default(PENDING)
+  source           BookingSource @default(WEB)
+  scheduledStart   DateTime
+  scheduledEnd     DateTime?
+  assignedGroomerId String?
+  depositRequiredCents Int       @default(0)
+  /// Stripe SetupIntent / card-on-file present for no-show auto-charge.
+  cardOnFile       Boolean       @default(false)
+  stripeCustomerId String?
+  stripePaymentMethodId String?
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store     Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer  Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  pet       Pet?              @relation(fields: [petId], references: [id], onDelete: SetNull)
+  lineItems BookingLineItem[]
+  workflow  WorkflowEvent[]
+  consents  ConsentSubmission[]
+  invoice   Invoice?
+
+  @@index([tenantId])
+  @@index([tenantId, storeId, scheduledStart])
+  @@index([tenantId, status])
+  @@map("booking")
+}
+
+model BookingLineItem {
+  id            String  @id @default(cuid())
+  tenantId      String
+  bookingId     String
+  catalogItemId String?
+  description   String
+  quantity      Int     @default(1)
+  unitPriceCents Int
+
+  booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  catalogItem CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@map("booking_line_item")
+}
+
+/// Timestamped workflow transition (productivity analysis).
+model WorkflowEvent {
+  id          String        @id @default(cuid())
+  tenantId    String
+  bookingId   String
+  stage       WorkflowStage
+  occurredAt  DateTime      @default(now())
+  actorUserId String?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([bookingId, occurredAt])
+  @@map("workflow_event")
+}
+
+/// Signed consent / intake form attached to a booking.
+model ConsentSubmission {
+  id         String   @id @default(cuid())
+  tenantId   String
+  bookingId  String
+  formType   String
+  signedAt   DateTime?
+  /// Touch-sign data URL, OTP token, or acceptance flag.
+  signature  String?
+  payload    Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@map("consent_submission")
+}
+
+// ============================================================
+// POS / billing
+// ============================================================
+
+model Invoice {
+  id            String        @id @default(cuid())
+  tenantId      String
+  storeId       String
+  bookingId     String?       @unique
+  status        InvoiceStatus @default(OPEN)
+  subtotalCents Int           @default(0)
+  taxCents      Int           @default(0)
+  /// Statement credit applied, gift cards, discounts (negative adjustments).
+  discountCents Int           @default(0)
+  tipCents      Int           @default(0)
+  /// Canadian cash-rounding adjustment when settled in cash (can be +/-).
+  cashRoundingCents Int       @default(0)
+  totalCents    Int           @default(0)
+  province      String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store    Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  booking  Booking?      @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  lines    InvoiceLine[]
+  taxLines InvoiceTaxLine[]
+  payments Payment[]
+
+  @@index([tenantId])
+  @@index([tenantId, storeId, createdAt])
+  @@map("invoice")
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  description String
+  amountCents Int
+  taxable     Boolean @default(true)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([invoiceId])
+  @@map("invoice_line")
+}
+
+model InvoiceTaxLine {
+  id          String  @id @default(cuid())
+  tenantId    String
+  invoiceId   String
+  /// GST | HST | PST | QST
+  component   String
+  rate        Float
+  amountCents Int
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_tax_line")
+}
+
+model Payment {
+  id                     String     @id @default(cuid())
+  tenantId               String
+  invoiceId              String
+  tender                 TenderType
+  amountCents            Int
+  stripePaymentIntentId  String?
+  createdAt              DateTime   @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([invoiceId])
+  @@map("payment")
+}
+
+// ============================================================
+// Inventory
+// ============================================================
+
+model InventoryItem {
+  id           String            @id @default(cuid())
+  tenantId     String
+  storeId      String
+  sku          String?
+  name         String
+  category     InventoryCategory
+  quantity     Float             @default(0)
+  unit         String?
+  reorderLevel Float?
+  /// For consumables: approx units consumed per groom (drives auto-deduction).
+  consumptionPerService Float?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, storeId])
+  @@map("inventory_item")
+}

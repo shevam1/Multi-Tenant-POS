@@ -1,0 +1,41 @@
+{
+  "name": "@omnipos/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "push": "prisma db push",
+    "rls": "prisma db execute --schema prisma/schema.prisma --file prisma/sql/rls_policies.sql",
+    "studio": "prisma studio",
+    "seed": "tsx prisma/seed.ts",
+    "setup": "prisma db push --skip-generate && prisma db execute --schema prisma/schema.prisma --file prisma/sql/rls_policies.sql && tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.0"
+  },
+  "devDependencies": {
+    "@omnipos/config": "workspace:*",
+    "@omnipos/domain-pet": "workspace:*",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.10.0",
+    "bcryptjs": "^2.4.3",
+    "prisma": "^6.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

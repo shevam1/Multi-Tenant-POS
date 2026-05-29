@@ -1,0 +1,18 @@
+{
+  "common": {
+    "book": "Book",
+    "bookNow": "Book now",
+    "continue": "Continue",
+    "back": "Back",
+    "language": "Language"
+  },
+  "booking": {
+    "title": "Book an appointment",
+    "selectService": "Select a service",
+    "selectPet": "Select your pet",
+    "newCustomer": "I'm a new customer",
+    "returningCustomer": "I've booked before",
+    "submit": "Request appointment",
+    "pendingNotice": "Your request has been received and is pending approval."
+  }
+}
