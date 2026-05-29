@@ -6,21 +6,27 @@ import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { BookingsModule } from './bookings/bookings.module';
 import { ContactMaskInterceptor } from './common/contact-mask.interceptor';
+import { CustomersModule } from './customers/customers.module';
 import { HealthController } from './health.controller';
 import { ModuleRegistryModule } from './modules/module-registry';
+import { PosModule } from './pos/pos.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    // Mounts an async context per request (before guards) so tenant id flows
-    // from auth into the tenant-scoped Prisma client.
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
     PrismaModule,
     AuditModule,
+    RealtimeModule,
     ModuleRegistryModule,
     AuthModule,
+    CustomersModule,
+    BookingsModule,
+    PosModule,
   ],
   controllers: [HealthController],
   providers: [
