@@ -316,4 +316,100 @@ export class CustomersService {
       data: { statementCreditCents: { increment: deltaCents } },
     });
   }
+
+  // ── Preferences ────────────────────────────────────────────────────────────
+
+  async savePreferences(customerId: string, prefs: {
+    autoMessageMode?: string;
+    blockMessages?: boolean;
+    blockOnlineBooking?: boolean;
+    optOutMarketingSms?: boolean;
+    optOutMarketingEmail?: boolean;
+    bookingFreqValue?: number;
+    bookingFreqUnit?: string;
+    preferredGroomerId?: string | null;
+  }) {
+    return this.prisma.db.customer.update({ where: { id: customerId }, data: prefs });
+  }
+
+  // ── Notes ──────────────────────────────────────────────────────────────────
+
+  async listNotes(customerId: string) {
+    return this.prisma.db.customerNote.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+      include: { author: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async addNote(customerId: string, body: string, authorId: string, tenantId: string) {
+    return this.prisma.db.customerNote.create({
+      data: { tenantId, customerId, body, authorId },
+      include: { author: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async deleteNote(noteId: string) {
+    return this.prisma.db.customerNote.delete({ where: { id: noteId } });
+  }
+
+  // ── Appointment stats + filtered history ──────────────────────────────────
+
+  async appointmentStats(customerId: string) {
+    const allBookings = await this.prisma.db.booking.findMany({
+      where: { customerId },
+      select: { status: true },
+    });
+    const statusMap: Record<string, number> = {};
+    for (const b of allBookings) statusMap[b.status] = (statusMap[b.status] ?? 0) + 1;
+
+    const invoiceAgg = await this.prisma.db.invoice.aggregate({
+      where: { booking: { customerId }, status: 'PAID' },
+      _sum: { totalCents: true },
+    });
+
+    return {
+      total: allBookings.length,
+      totalSalesCents: invoiceAgg._sum.totalCents ?? 0,
+      completed: statusMap['COMPLETED'] ?? 0,
+      cancelled: statusMap['CANCELLED'] ?? 0,
+      noShow: statusMap['NO_SHOW'] ?? 0,
+      unclosed: (statusMap['CHECKED_IN'] ?? 0) + (statusMap['IN_PROGRESS'] ?? 0) + (statusMap['READY'] ?? 0),
+      outstanding: (statusMap['PENDING'] ?? 0) + (statusMap['CONFIRMED'] ?? 0),
+    };
+  }
+
+  async appointmentHistory(customerId: string, filter?: string) {
+    const now = new Date();
+    const whereBase: Prisma.BookingWhereInput = { customerId };
+
+    if (filter === 'upcoming') {
+      whereBase.scheduledStart = { gte: now };
+      whereBase.status = { in: ['PENDING', 'CONFIRMED'] };
+    } else if (filter === 'completed') {
+      whereBase.status = 'COMPLETED';
+    } else if (filter === 'cancelled') {
+      whereBase.status = 'CANCELLED';
+    } else if (filter === 'no_show') {
+      whereBase.status = 'NO_SHOW';
+    } else if (filter === 'outstanding') {
+      whereBase.status = { in: ['PENDING', 'CONFIRMED'] };
+    } else if (filter === 'unclosed') {
+      whereBase.status = { in: ['CHECKED_IN', 'IN_PROGRESS', 'READY'] };
+    }
+
+    return this.prisma.db.booking.findMany({
+      where: whereBase,
+      orderBy: { scheduledStart: 'desc' },
+      take: 50,
+      include: {
+        store: { select: { name: true } },
+        pet: { select: { id: true, name: true, breed: true } },
+        lineItems: { select: { description: true, unitPriceCents: true } },
+        invoice: { select: { totalCents: true, status: true } },
+        // assigned groomer from workflow events
+        workflow: { where: { stage: 'CHECK_IN' }, select: { occurredAt: true }, take: 1 },
+      },
+    });
+  }
 }

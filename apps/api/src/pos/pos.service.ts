@@ -165,6 +165,60 @@ export class PosService {
     }
   }
 
+  /** Get saved Stripe card-on-file payment methods for a customer. */
+  async getPaymentMethods(customerId: string) {
+    const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });
+    if (!customer?.stripeCustomerId || !this.stripe.enabled) return { methods: [] };
+    const list = await this.stripe.client!.paymentMethods.list({
+      customer: customer.stripeCustomerId,
+      type: 'card',
+    });
+    return {
+      methods: list.data.map(pm => ({
+        id: pm.id,
+        last4: pm.card?.last4,
+        brand: pm.card?.brand,
+        expMonth: pm.card?.exp_month,
+        expYear: pm.card?.exp_year,
+      })),
+    };
+  }
+
+  /**
+   * Generate a Stripe Payment Link for a custom amount.
+   * Use case: no-show fees, deposits, balance due — staff sends link to client.
+   */
+  async createPaymentLink(customerId: string, amountCents: number, description: string) {
+    const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+
+    if (!this.stripe.enabled) {
+      return { url: null, note: 'Stripe not configured' };
+    }
+
+    const stripeCustomerId = await this.stripe.ensureCustomer({
+      customerId,
+      email: customer.email,
+      name: customer.fullName,
+      stripeCustomerId: customer.stripeCustomerId,
+    });
+    if (stripeCustomerId && stripeCustomerId !== customer.stripeCustomerId) {
+      await this.prisma.db.customer.update({ where: { id: customerId }, data: { stripeCustomerId } });
+    }
+
+    // Create an ad-hoc price + payment link
+    const price = await this.stripe.client!.prices.create({
+      currency: 'cad',
+      unit_amount: amountCents,
+      product_data: { name: description || 'OmniPOS charge' },
+    });
+    const link = await this.stripe.client!.paymentLinks.create({
+      line_items: [{ price: price.id, quantity: 1 }],
+      metadata: { customerId, description },
+    });
+    return { url: link.url, linkId: link.id };
+  }
+
   /** Create a Stripe SetupIntent for card-on-file (booking intake). */
   async createSetupIntent(customerId: string) {
     const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });

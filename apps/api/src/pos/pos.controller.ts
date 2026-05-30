@@ -39,4 +39,21 @@ export class PosController {
   getStore(@Param('storeId') storeId: string) {
     return this.pos.getStore(storeId);
   }
+
+  /** Generate a Stripe Payment Link for a custom amount (e.g. no-show fee, deposit). */
+  @Roles('RECEPTION', 'STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Post('customers/:customerId/payment-link')
+  paymentLink(
+    @Param('customerId') customerId: string,
+    @Body('amountCents') amountCents: number,
+    @Body('description') description: string,
+  ) {
+    return this.pos.createPaymentLink(customerId, amountCents, description);
+  }
+
+  /** Get saved Stripe payment methods for a customer. */
+  @Get('customers/:customerId/payment-methods')
+  paymentMethods(@Param('customerId') customerId: string) {
+    return this.pos.getPaymentMethods(customerId);
+  }
 }

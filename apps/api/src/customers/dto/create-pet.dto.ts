@@ -12,5 +12,8 @@ export class CreatePetDto {
   @IsOptional() @IsString() allergies?: string;
   @IsOptional() @IsString() medicalNotes?: string;
   @IsOptional() @IsString() preferredGroomerId?: string;
+  @IsOptional() @IsString() groomNotes?: string;
+  @IsOptional() @IsString() hairLength?: string;
+  @IsOptional() isFixed?: boolean;
   @IsOptional() attributes?: Record<string, unknown>;
 }

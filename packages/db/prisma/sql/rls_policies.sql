@@ -44,7 +44,8 @@ BEGIN
       ('form_template',          'tenantId'),
       ('membership_plan',        'tenantId'),
       ('membership',             'tenantId'),
-      ('loyalty_transaction',    'tenantId')
+      ('loyalty_transaction',    'tenantId'),
+      ('customer_note',          'tenantId')
     ) AS v(table_name, tenant_col)
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t.table_name);

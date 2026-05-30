@@ -153,6 +153,7 @@ model Tenant {
   membershipPlans  MembershipPlan[]
   memberships      Membership[]
   loyaltyTransactions LoyaltyTransaction[]
+  customerNotes    CustomerNote[]
 
   @@map("tenant")
 }
@@ -201,6 +202,7 @@ model User {
   shifts         ShiftSchedule[]
   timeclockEntries TimeclockEntry[]
   leaveRequests  LeaveRequest[]
+  customerNotes  CustomerNote[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -251,6 +253,18 @@ model Customer {
   statementCreditCents Int @default(0)
   /// Running loyalty points balance (spec §11 loyalty engine).
   loyaltyPoints   Int @default(0)
+
+  // ── Preferences ──────────────────────────────────────────────────────────
+  /// Preferred staff/groomer at the customer level (overrides per-pet preference).
+  preferredGroomerId    String?
+  autoMessageMode       String  @default("FOLLOW_RULES")
+  blockMessages         Boolean @default(false)
+  blockOnlineBooking    Boolean @default(false)
+  optOutMarketingSms    Boolean @default(false)
+  optOutMarketingEmail  Boolean @default(false)
+  bookingFreqValue      Int     @default(1)
+  bookingFreqUnit       String  @default("MONTHS")
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -260,6 +274,7 @@ model Customer {
   consents CommunicationConsent[]
   memberships         Membership[]
   loyaltyTransactions LoyaltyTransaction[]
+  notes               CustomerNote[]
 
   @@index([tenantId])
   @@index([tenantId, phone])
@@ -282,6 +297,8 @@ model Pet {
   allergies         String?
   medicalNotes      String?
   preferredGroomerId String?
+  hairLength        String?
+  isFixed           Boolean @default(false)
   /// Coat style record: clip style, blade sizes, products, behavior notes.
   groomNotes        String?
   /// Flexible domain-specific fields validated by the active module.
@@ -682,6 +699,26 @@ model LeaveRequest {
   @@index([tenantId, storeId])
   @@index([userId])
   @@map("leave_request")
+}
+
+// ── Customer notes ───────────────────────────────────────────────────────────
+
+/// Staff notes attached to a customer — append-only, timestamped with author.
+model CustomerNote {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String
+  body       String
+  authorId   String
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@map("customer_note")
 }
 
 // ── Membership & loyalty (spec §11) ──────────────────────────────────────────

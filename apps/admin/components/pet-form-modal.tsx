@@ -11,6 +11,8 @@ interface Pet {
   dateOfBirth: string | null;
   gender: string | null;
   weightKg: number | null;
+  hairLength: string | null;
+  isFixed: boolean;
   tags: string[];
   allergies: string | null;
   medicalNotes: string | null;
@@ -35,6 +37,8 @@ export default function PetFormModal({ customerId, pet, onClose, onSaved }: Prop
     dateOfBirth: pet?.dateOfBirth ? pet.dateOfBirth.slice(0, 10) : '',
     gender: pet?.gender ?? '',
     weightKg: pet?.weightKg ? String(pet.weightKg) : '',
+    hairLength: pet?.hairLength ?? '',
+    isFixed: pet?.isFixed ?? false,
     allergies: pet?.allergies ?? '',
     medicalNotes: pet?.medicalNotes ?? '',
     groomNotes: pet?.groomNotes ?? '',
@@ -69,6 +73,8 @@ export default function PetFormModal({ customerId, pet, onClose, onSaved }: Prop
         dateOfBirth: form.dateOfBirth || null,
         gender: form.gender || null,
         weightKg: form.weightKg ? parseFloat(form.weightKg) : null,
+        hairLength: form.hairLength || null,
+        isFixed: form.isFixed,
         allergies: form.allergies || null,
         medicalNotes: form.medicalNotes || null,
         groomNotes: form.groomNotes || null,
@@ -136,6 +142,21 @@ export default function PetFormModal({ customerId, pet, onClose, onSaved }: Prop
               <label className="block text-xs font-medium text-neutral-500 mb-1">Weight (kg)</label>
               <input type="number" step="0.1" min="0" className="w-full rounded-lg border px-3 py-2 text-sm"
                 value={form.weightKg} onChange={e => set('weightKg', e.target.value)} placeholder="e.g. 12.5" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1">Hair length</label>
+              <select className="w-full rounded-lg border px-3 py-2 text-sm bg-white"
+                value={form.hairLength} onChange={e => set('hairLength', e.target.value)}>
+                <option value="">N/A</option>
+                <option value="SHORT">Short</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LONG">Long</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3 pt-1">
+              <label className="text-xs font-medium text-neutral-500">Fixed (spayed/neutered)</label>
+              <input type="checkbox" className="h-4 w-4 rounded"
+                checked={form.isFixed} onChange={e => set('isFixed', e.target.checked)} />
             </div>
           </div>
 

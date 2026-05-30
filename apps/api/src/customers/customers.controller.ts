@@ -102,6 +102,44 @@ export class CustomersController {
     return this.customers.applyStatementCredit(id, deltaCents);
   }
 
+  // ── Preferences ──────────────────────────────────────────────────────────
+
+  @Patch(':id/preferences')
+  savePreferences(@Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.customers.savePreferences(id, body);
+  }
+
+  // ── Notes ─────────────────────────────────────────────────────────────────
+
+  @Get(':id/notes')
+  listNotes(@Param('id') id: string) {
+    return this.customers.listNotes(id);
+  }
+
+  @Post(':id/notes')
+  addNote(@Param('id') id: string, @Body('body') body: string, @CurrentUser() user: AuthUser) {
+    return this.customers.addNote(id, body, user.userId, user.tenantId);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Delete('notes/:noteId')
+  @HttpCode(204)
+  deleteNote(@Param('noteId') noteId: string) {
+    return this.customers.deleteNote(noteId);
+  }
+
+  // ── Appointment stats + history ───────────────────────────────────────────
+
+  @Get(':id/stats')
+  appointmentStats(@Param('id') id: string) {
+    return this.customers.appointmentStats(id);
+  }
+
+  @Get(':id/appointments')
+  appointmentHistory(@Param('id') id: string, @Query('filter') filter?: string) {
+    return this.customers.appointmentHistory(id, filter);
+  }
+
   // ── Pets ──────────────────────────────────────────────────────────────────
 
   @Post(':id/pets')
