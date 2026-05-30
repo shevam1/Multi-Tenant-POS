@@ -14,6 +14,7 @@ import { ModuleRegistryModule } from './modules/module-registry';
 import { PosModule } from './pos/pos.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { TenantsModule } from './tenants/tenants.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     CustomersModule,
     BookingsModule,
     PosModule,
+    TenantsModule,
   ],
   controllers: [HealthController],
   providers: [
