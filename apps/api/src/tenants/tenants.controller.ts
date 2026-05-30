@@ -1,7 +1,8 @@
-import { Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Public } from '../auth/decorators';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { CatalogService } from '../catalog/catalog.service';
 import type { BookingSource } from '@omnipos/db';
 
 @Controller('public')
@@ -9,6 +10,7 @@ export class TenantsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly catalog: CatalogService,
   ) {}
 
   @Public()
@@ -24,13 +26,20 @@ export class TenantsController {
 
   @Public()
   @Get('tenant/:slug/catalog')
-  async getCatalog(@Param('slug') slug: string) {
+  async getCatalog(@Param('slug') slug: string, @Query('storeId') storeId?: string) {
     const tenant = await this.prisma.asSystem(tx => tx.tenant.findUnique({ where: { slug } }));
     if (!tenant) throw new NotFoundException('Tenant not found');
-    // Use explicit transaction with tenant context so RLS applies
+
+    // Location-aware catalog: items available at the store, priced per location.
+    if (storeId) {
+      return this.catalog.catalogForStore(tenant.id, storeId);
+    }
+
+    // No store specified — return all active items at base price (backward compat).
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('app.current_tenant', ${tenant.id}, TRUE)`;
-      return tx.catalogItem.findMany({ where: { active: true }, orderBy: { kind: 'asc' } });
+      const items = await tx.catalogItem.findMany({ where: { active: true }, orderBy: { kind: 'asc' } });
+      return items.map(i => ({ id: i.id, kind: i.kind, name: i.name, description: i.description, durationMin: i.durationMin, priceCents: i.basePriceCents, available: true }));
     }, { timeout: 30000 });
   }
 
@@ -93,12 +102,16 @@ export class TenantsController {
         petId = pet.id;
       }
 
-      // Resolve line items from catalog
+      // Resolve line items from catalog, applying per-location price overrides.
       const lineItems: { tenantId: string; catalogItemId: string; description: string; quantity: number; unitPriceCents: number }[] = [];
       if (body.catalogItemIds?.length) {
-        const items = await tx.catalogItem.findMany({ where: { id: { in: body.catalogItemIds } } });
+        const items = await tx.catalogItem.findMany({
+          where: { id: { in: body.catalogItemIds } },
+          include: { storeOverrides: { where: { storeId: body.storeId } } },
+        });
         for (const item of items) {
-          lineItems.push({ tenantId: tenant.id, catalogItemId: item.id, description: item.name, quantity: 1, unitPriceCents: item.basePriceCents });
+          const priceCents = item.storeOverrides[0]?.priceCents ?? item.basePriceCents;
+          lineItems.push({ tenantId: tenant.id, catalogItemId: item.id, description: item.name, quantity: 1, unitPriceCents: priceCents });
         }
       }
 

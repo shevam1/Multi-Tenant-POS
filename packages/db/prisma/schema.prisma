@@ -154,6 +154,7 @@ model Tenant {
   memberships      Membership[]
   loyaltyTransactions LoyaltyTransaction[]
   customerNotes    CustomerNote[]
+  catalogItemStores CatalogItemStore[]
 
   @@map("tenant")
 }
@@ -179,6 +180,7 @@ model Store {
   shifts           ShiftSchedule[]
   timeclockEntries TimeclockEntry[]
   leaveRequests    LeaveRequest[]
+  catalogOverrides CatalogItemStore[]
 
   @@index([tenantId])
   @@map("store")
@@ -376,9 +378,31 @@ model CatalogItem {
 
   tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   bookingLines BookingLineItem[]
+  storeOverrides CatalogItemStore[]
 
   @@index([tenantId])
   @@map("catalog_item")
+}
+
+/// Per-location pricing + availability override for a catalog item.
+/// If no row exists for an (item, store), the item is available everywhere at base price.
+model CatalogItemStore {
+  id            String  @id @default(cuid())
+  tenantId      String
+  catalogItemId String
+  storeId       String
+  /// Null = use the item's base price.
+  priceCents    Int?
+  available     Boolean @default(true)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  catalogItem CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([catalogItemId, storeId])
+  @@index([tenantId])
+  @@index([storeId])
+  @@map("catalog_item_store")
 }
 
 model PricingRule {

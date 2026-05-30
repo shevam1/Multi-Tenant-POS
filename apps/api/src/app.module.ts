@@ -23,6 +23,7 @@ import { MembershipsModule } from './memberships/memberships.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { StripeModule } from './stripe/stripe.module';
 import { StaffModule } from './staff/staff.module';
+import { CatalogModule } from './catalog/catalog.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { StaffModule } from './staff/staff.module';
     MembershipsModule,
     AnalyticsModule,
     StaffModule,
+    CatalogModule,
   ],
   controllers: [HealthController],
   providers: [

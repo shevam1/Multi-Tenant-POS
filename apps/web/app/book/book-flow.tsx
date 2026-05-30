@@ -17,7 +17,7 @@ interface CatalogItem {
   kind: string;
   name: string;
   description: string | null;
-  basePriceCents: number;
+  priceCents: number;
   durationMin: number | null;
 }
 
@@ -49,15 +49,21 @@ export default function BookFlow() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      apiFetch<Tenant>(`/public/tenant/${slug}`),
-      apiFetch<CatalogItem[]>(`/public/tenant/${slug}/catalog`),
-    ]).then(([t, c]) => {
+    apiFetch<Tenant>(`/public/tenant/${slug}`).then(async t => {
       setTenant(t);
+      const storeId = t.stores[0]?.id ?? '';
+      if (storeId) setForm(f => ({ ...f, storeId }));
+      // Location-aware catalog: prices + availability for the selected store
+      const c = await apiFetch<CatalogItem[]>(`/public/tenant/${slug}/catalog${storeId ? `?storeId=${storeId}` : ''}`);
       setCatalog(c);
-      if (t.stores[0]) setForm(f => ({ ...f, storeId: t.stores[0].id }));
     }).catch(() => setError('Unable to load booking page. Please try again.'));
   }, [slug]);
+
+  // Refetch catalog when the chosen store changes (location-specific pricing)
+  useEffect(() => {
+    if (!form.storeId) return;
+    apiFetch<CatalogItem[]>(`/public/tenant/${slug}/catalog?storeId=${form.storeId}`).then(setCatalog).catch(() => {});
+  }, [form.storeId, slug]);
 
   async function submit() {
     setSubmitting(true);
@@ -189,7 +195,7 @@ export default function BookFlow() {
                   <div className="flex-1">
                     <p className="font-semibold text-sm">{item.name}</p>
                     {item.description && <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>}
-                    <p className="mt-1 text-xs text-neutral-400">{fmt(item.basePriceCents)}{item.durationMin ? ` · ${item.durationMin} min` : ''}</p>
+                    <p className="mt-1 text-xs text-neutral-400">{fmt(item.priceCents)}{item.durationMin ? ` · ${item.durationMin} min` : ''}</p>
                   </div>
                 </label>
               ))}
@@ -250,7 +256,7 @@ export default function BookFlow() {
               {form.selectedItems.length > 0 && (
                 <div>
                   <p className="text-neutral-500 mb-1">Services</p>
-                  {form.selectedItems.map(id => { const item = catalog.find(c => c.id === id); return item ? <p key={id} className="font-medium">{item.name} — {fmt(item.basePriceCents)}</p> : null; })}
+                  {form.selectedItems.map(id => { const item = catalog.find(c => c.id === id); return item ? <p key={id} className="font-medium">{item.name} — {fmt(item.priceCents)}</p> : null; })}
                 </div>
               )}
             </div>
