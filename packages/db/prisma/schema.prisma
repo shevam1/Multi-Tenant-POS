@@ -451,6 +451,8 @@ model Booking {
   stripeCustomerId String?
   stripePaymentMethodId String?
   notes            String?
+  /// Status color tags surfaced on the calendar (e.g. AWAITING_VACCINATION, UNREACHABLE).
+  flags            String[]      @default([])
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 

@@ -14,6 +14,36 @@ export class BookingsController {
     return this.bookings.listForStore(storeId, date);
   }
 
+  // ── Calendar ──────────────────────────────────────────────────────────────
+
+  @Get('calendar')
+  calendar(@Query('storeId') storeId: string, @Query('weekStart') weekStart: string) {
+    return this.bookings.calendarForStore(storeId, weekStart);
+  }
+
+  @Get(':id/audit')
+  audit(@Param('id') id: string) {
+    return this.bookings.appointmentAudit(id);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Patch(':id/reschedule')
+  reschedule(@Param('id') id: string, @Body() dto: { scheduledStart?: string; scheduledEnd?: string | null; assignedGroomerId?: string | null }) {
+    return this.bookings.reschedule(id, dto);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Patch(':id/flags')
+  setFlags(@Param('id') id: string, @Body('flags') flags: string[]) {
+    return this.bookings.setFlags(id, flags ?? []);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Patch(':id/confirm')
+  setConfirmed(@Param('id') id: string, @Body('confirmed') confirmed: boolean, @Body('override') override?: boolean) {
+    return this.bookings.setConfirmed(id, confirmed, override ?? false);
+  }
+
   @Get(':id')
   get(@Param('id') id: string) {
     return this.bookings.findOne(id);

@@ -131,6 +131,11 @@ export default function DashboardPage() {
               Staff
             </a>
           )}
+          {user?.permissions?.includes('calendar.view') && (
+            <a href="/calendar" className="rounded-md bg-fuchsia-100 px-3 py-1.5 text-xs font-medium text-fuchsia-700 hover:bg-fuchsia-200">
+              Calendar
+            </a>
+          )}
           <a href="/scheduling" className="rounded-md bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200">
             Schedule
           </a>

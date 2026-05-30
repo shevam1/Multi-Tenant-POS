@@ -270,4 +270,97 @@ export class BookingsService {
     await this.audit.log({ action: 'BOOKING_FORCE_CLOSE', entityType: 'booking', entityId: id });
     return { bookingId: id, status: 'COMPLETED' };
   }
+
+  // ── Calendar ────────────────────────────────────────────────────────────────
+
+  /** All bookings for a store in a week window — for the calendar board. */
+  async calendarForStore(storeId: string, weekStart: string) {
+    const start = new Date(weekStart + 'T00:00:00');
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+
+    return this.prisma.db.booking.findMany({
+      where: { storeId, scheduledStart: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
+      orderBy: { scheduledStart: 'asc' },
+      select: {
+        id: true, status: true, scheduledStart: true, scheduledEnd: true,
+        assignedGroomerId: true, flags: true, notes: true, source: true,
+        customer: { select: { id: true, fullName: true } },
+        pet: { select: { id: true, name: true, breed: true } },
+        lineItems: { select: { description: true, unitPriceCents: true } },
+      },
+    });
+  }
+
+  /**
+   * Reschedule / reassign a booking (drag-and-drop on the calendar).
+   * Guards against double-booking the same groomer in an overlapping window.
+   */
+  async reschedule(id: string, dto: { scheduledStart?: string; scheduledEnd?: string | null; assignedGroomerId?: string | null }) {
+    const booking = await this.prisma.db.booking.findUnique({ where: { id } });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    const newStart = dto.scheduledStart ? new Date(dto.scheduledStart) : booking.scheduledStart;
+    const newEnd = dto.scheduledEnd !== undefined
+      ? (dto.scheduledEnd ? new Date(dto.scheduledEnd) : null)
+      : booking.scheduledEnd;
+    const groomerId = dto.assignedGroomerId !== undefined ? dto.assignedGroomerId : booking.assignedGroomerId;
+
+    // Overlap guard for the assigned groomer
+    if (groomerId && newEnd) {
+      const clash = await this.prisma.db.booking.findFirst({
+        where: {
+          id: { not: id }, storeId: booking.storeId, assignedGroomerId: groomerId,
+          status: { notIn: ['CANCELLED', 'NO_SHOW', 'COMPLETED'] },
+          scheduledStart: { lt: newEnd },
+          scheduledEnd: { gt: newStart },
+        },
+      });
+      if (clash) throw new BadRequestException('That groomer already has an appointment in this time slot');
+    }
+
+    const updated = await this.prisma.db.booking.update({
+      where: { id },
+      data: { scheduledStart: newStart, scheduledEnd: newEnd, assignedGroomerId: groomerId },
+    });
+    await this.audit.log({ action: 'BOOKING_RESCHEDULE', entityType: 'booking', entityId: id,
+      metadata: { scheduledStart: newStart, assignedGroomerId: groomerId } });
+    this.realtime.emitBookingStatusChange(booking.storeId, { bookingId: id, rescheduled: true });
+    return updated;
+  }
+
+  /** Set the status color tags on a booking. */
+  async setFlags(id: string, flags: string[]) {
+    const updated = await this.prisma.db.booking.update({ where: { id }, data: { flags } });
+    await this.audit.log({ action: 'BOOKING_FLAGS', entityType: 'booking', entityId: id, metadata: { flags } });
+    return updated;
+  }
+
+  /** Toggle confirmed (CONFIRMED) ↔ unconfirmed (PENDING). */
+  async setConfirmed(id: string, confirmed: boolean, override = false) {
+    if (confirmed) return this.approve(id, override);
+    const updated = await this.prisma.db.booking.update({ where: { id }, data: { status: 'PENDING' } });
+    await this.audit.log({ action: 'BOOKING_UNCONFIRM', entityType: 'booking', entityId: id });
+    return updated;
+  }
+
+  /** Appointment audit trail — combines audit log + workflow events. */
+  async appointmentAudit(id: string) {
+    const booking = await this.prisma.db.booking.findUnique({ where: { id } });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    const [logs, workflow] = await Promise.all([
+      this.prisma.asSystem(tx => tx.auditLog.findMany({
+        where: { tenantId: booking.tenantId, entityType: 'booking', entityId: id },
+        orderBy: { createdAt: 'desc' }, take: 50,
+      })),
+      this.prisma.db.workflowEvent.findMany({ where: { bookingId: id }, orderBy: { occurredAt: 'asc' } }),
+    ]);
+
+    return {
+      created: { at: booking.createdAt, source: booking.source },
+      logs: logs.map(l => ({ action: l.action, at: l.createdAt, metadata: l.metadata })),
+      workflow: workflow.map(w => ({ stage: w.stage, at: w.occurredAt })),
+    };
+  }
 }
