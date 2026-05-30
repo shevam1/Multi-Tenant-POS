@@ -47,6 +47,9 @@ export default function CheckoutPage() {
   const [done, setDone] = useState(false);
   const [member, setMember] = useState<MemberInfo | null>(null);
   const [earned, setEarned] = useState<number | null>(null);
+  const [couponInput, setCouponInput] = useState('');
+  const [coupon, setCoupon] = useState<{ code: string; discountCents: number } | null>(null);
+  const [couponError, setCouponError] = useState('');
 
   useEffect(() => {
     if (!getToken()) { router.push('/login'); return; }
@@ -73,12 +76,28 @@ export default function CheckoutPage() {
     if (!booking) return;
     const lines = booking.lineItems.map(l => ({ description: l.description, amountCents: l.unitPriceCents }));
     if (lines.length === 0) { setPreview(null); return; }
-    const discountCents = useCredit ? booking.customer.statementCreditCents : 0;
+    const credit = useCredit ? booking.customer.statementCreditCents : 0;
+    const discountCents = credit + (coupon?.discountCents ?? 0);
     apiFetch<CheckoutPreview>(`/pos/preview?province=${booking.store.province}`, {
       method: 'POST',
       body: JSON.stringify({ lines, tender, discountCents, tipCents }),
     }).then(setPreview).catch(() => null);
-  }, [booking, tender, useCredit, tipCents]);
+  }, [booking, tender, useCredit, tipCents, coupon]);
+
+  async function applyCoupon() {
+    if (!booking || !couponInput.trim()) return;
+    setCouponError('');
+    const subtotal = booking.lineItems.reduce((s, l) => s + l.unitPriceCents, 0);
+    const res = await apiFetch<{ valid: boolean; reason?: string; code?: string; discountCents?: number }>(
+      `/coupons/validate?code=${encodeURIComponent(couponInput.trim())}&subtotalCents=${subtotal}`,
+    ).catch(() => null);
+    if (res?.valid) {
+      setCoupon({ code: res.code!, discountCents: res.discountCents ?? 0 });
+    } else {
+      setCoupon(null);
+      setCouponError(res?.reason ?? 'Invalid coupon');
+    }
+  }
 
   async function pay() {
     if (!booking) return;
@@ -87,7 +106,11 @@ export default function CheckoutPage() {
       const lines = booking.lineItems.map(l => ({ description: l.description, amountCents: l.unitPriceCents }));
       const res = await apiFetch<{ loyalty?: { earned: number } }>(`/pos/bookings/${bookingId}/checkout`, {
         method: 'POST',
-        body: JSON.stringify({ lines, tender, discountCents: useCredit ? booking.customer.statementCreditCents : 0, tipCents }),
+        body: JSON.stringify({
+          lines, tender, tipCents,
+          discountCents: useCredit ? booking.customer.statementCreditCents : 0,
+          couponCode: coupon?.code,
+        }),
       });
       setEarned(res.loyalty?.earned ?? null);
       setDone(true);
@@ -166,6 +189,26 @@ export default function CheckoutPage() {
             </label>
           </div>
         )}
+
+        {/* Coupon / discount */}
+        <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <p className="mb-2 font-semibold text-sm">Coupon / discount</p>
+          {coupon ? (
+            <div className="flex items-center justify-between rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm">
+              <span><span className="font-mono font-bold">{coupon.code}</span> applied — <span className="text-green-700 font-semibold">−{fmt(coupon.discountCents)}</span></span>
+              <button onClick={() => { setCoupon(null); setCouponInput(''); }} className="text-xs text-neutral-500 hover:text-red-500">Remove</button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex gap-2">
+                <input className="flex-1 rounded-lg border px-3 py-2 text-sm font-mono uppercase"
+                  placeholder="Enter code" value={couponInput} onChange={e => setCouponInput(e.target.value.toUpperCase())} />
+                <button onClick={applyCoupon} className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-neutral-50">Apply</button>
+              </div>
+              {couponError && <p className="mt-1 text-xs text-red-500">{couponError}</p>}
+            </div>
+          )}
+        </div>
 
         {/* Tender */}
         <div className="rounded-xl border bg-white p-5 shadow-sm">

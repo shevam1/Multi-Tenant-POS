@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { StripeService } from '../stripe/stripe.service';
+import { CouponsService } from '../coupons/coupons.service';
 import type { CheckoutDto } from './dto/checkout.dto';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class PosService {
     private readonly audit: AuditService,
     private readonly memberships: MembershipsService,
     private readonly stripe: StripeService,
+    private readonly coupons: CouponsService,
   ) {}
 
   async getStore(storeId: string) {
@@ -47,7 +49,20 @@ export class PosService {
     const serviceSubtotal = dto.lines.reduce((s, l) => s + l.amountCents, 0);
     const memberBenefits = await this.memberships.benefitsFor(booking.customerId, serviceSubtotal);
     const statementCreditRequested = dto.discountCents ?? 0;
-    const totalDiscount = statementCreditRequested + memberBenefits.discountCents;
+
+    // Coupon discount (feature 5): validate + apply to the service subtotal.
+    let couponDiscountCents = 0;
+    let appliedCouponCode: string | undefined;
+    let appliedCouponId: string | undefined;
+    if (dto.couponCode) {
+      const result = await this.coupons.validate(dto.couponCode, serviceSubtotal);
+      if (!result.valid) throw new BadRequestException(`Coupon: ${result.reason}`);
+      couponDiscountCents = result.discountCents ?? 0;
+      appliedCouponCode = result.code;
+      appliedCouponId = result.couponId;
+    }
+
+    const totalDiscount = statementCreditRequested + memberBenefits.discountCents + couponDiscountCents;
 
     const result = computeCheckout({
       province,
@@ -89,6 +104,8 @@ export class PosService {
         subtotalCents: result.subtotalCents,
         taxCents: result.totalTaxCents,
         discountCents: result.discountCents,
+        couponCode: appliedCouponCode,
+        couponDiscountCents,
         tipCents: result.tipCents,
         cashRoundingCents: result.cashRoundingCents,
         totalCents: result.totalCents,
@@ -124,6 +141,9 @@ export class PosService {
     await this.prisma.db.booking.update({ where: { id: bookingId }, data: { status: 'COMPLETED' } });
     await this.deductInventory(booking.storeId, tenantId);
 
+    // Increment coupon redemption count after a successful checkout
+    if (appliedCouponId) await this.coupons.redeem(appliedCouponId);
+
     const loyalty = await this.memberships.accrueForCheckout(
       booking.customerId,
       result.netTotalCents,
@@ -149,6 +169,7 @@ export class PosService {
       invoice,
       checkout: result,
       member: { tier: memberBenefits.tier, discountCents: memberBenefits.discountCents },
+      coupon: appliedCouponCode ? { code: appliedCouponCode, discountCents: couponDiscountCents } : null,
       loyalty,
     };
   }

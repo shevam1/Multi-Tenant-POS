@@ -19,4 +19,6 @@ export class CheckoutDto {
   @IsOptional() @IsNumber() discountCents?: number;
   @IsOptional() @IsNumber() tipCents?: number;
   @IsOptional() @IsString() stripePaymentMethodId?: string;
+  /** Optional coupon code applied to the service subtotal. */
+  @IsOptional() @IsString() couponCode?: string;
 }

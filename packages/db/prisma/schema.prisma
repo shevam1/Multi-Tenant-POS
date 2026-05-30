@@ -20,6 +20,12 @@ datasource db {
 // Enums
 // ============================================================
 
+/// Coupon discount type.
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
 /// CRM lifecycle status for a customer record.
 enum CustomerStatus {
   ACTIVE
@@ -155,6 +161,7 @@ model Tenant {
   loyaltyTransactions LoyaltyTransaction[]
   customerNotes    CustomerNote[]
   catalogItemStores CatalogItemStore[]
+  coupons          Coupon[]
 
   @@map("tenant")
 }
@@ -552,6 +559,9 @@ model Invoice {
   taxCents      Int           @default(0)
   /// Statement credit applied, gift cards, discounts (negative adjustments).
   discountCents Int           @default(0)
+  /// Coupon code applied to this invoice (if any) + the portion of discount it contributed.
+  couponCode    String?
+  couponDiscountCents Int     @default(0)
   tipCents      Int           @default(0)
   /// Canadian cash-rounding adjustment when settled in cash (can be +/-).
   cashRoundingCents Int       @default(0)
@@ -727,6 +737,34 @@ model LeaveRequest {
   @@index([tenantId, storeId])
   @@index([userId])
   @@map("leave_request")
+}
+
+// ── Coupons & discounts ──────────────────────────────────────────────────────
+
+/// A discount code applied at checkout or on an appointment.
+model Coupon {
+  id               String     @id @default(cuid())
+  tenantId         String
+  code             String
+  description      String?
+  type             CouponType
+  /// PERCENT: 0-100. FIXED: cents off.
+  value            Int
+  active           Boolean    @default(true)
+  /// Minimum service subtotal (cents) required to apply.
+  minSubtotalCents Int        @default(0)
+  /// Null = unlimited redemptions.
+  maxRedemptions   Int?
+  timesRedeemed    Int        @default(0)
+  expiresAt        DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("coupon")
 }
 
 // ── Customer notes ───────────────────────────────────────────────────────────

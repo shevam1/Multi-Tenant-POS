@@ -145,6 +145,11 @@ export default function DashboardPage() {
               Packages
             </a>
           )}
+          {user?.permissions?.includes('coupons.manage') && (
+            <a href="/coupons" className="rounded-md bg-rose-100 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-200">
+              Coupons
+            </a>
+          )}
           <a href="/analytics" className="rounded-md bg-indigo-100 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-200">
             HQ Analytics
           </a>

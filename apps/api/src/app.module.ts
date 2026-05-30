@@ -24,6 +24,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { StripeModule } from './stripe/stripe.module';
 import { StaffModule } from './staff/staff.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { CouponsModule } from './coupons/coupons.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { CatalogModule } from './catalog/catalog.module';
     AnalyticsModule,
     StaffModule,
     CatalogModule,
+    CouponsModule,
   ],
   controllers: [HealthController],
   providers: [
