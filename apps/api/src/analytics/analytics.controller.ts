@@ -41,4 +41,17 @@ export class AnalyticsController {
     const range = from && to ? { from, to } : defaultRange();
     return this.svc.topServices(range, limit ? Number(limit) : 10);
   }
+
+  /** Comprehensive report driven by selector combination (date/location/groomer/period). */
+  @Get('report')
+  report(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('storeId') storeId?: string,
+    @Query('groomerId') groomerId?: string,
+    @Query('period') period?: 'day' | 'week' | 'month' | 'year',
+  ) {
+    const range = from && to ? { from, to } : defaultRange();
+    return this.svc.report({ ...range, storeId: storeId || undefined, groomerId: groomerId || undefined, period });
+  }
 }

@@ -207,6 +207,8 @@ model User {
   permissions  String[] @default([])
   /// Optional override of the password (forces reset on next login when true).
   mustResetPassword Boolean @default(false)
+  /// Commission rate (0..1) on attributed service revenue — for payroll/analytics.
+  commissionRate Float   @default(0.4)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

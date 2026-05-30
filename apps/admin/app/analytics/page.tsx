@@ -4,261 +4,331 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, getToken } from '@/lib/api';
 
-interface RevenueSummary {
-  totalRevenueCents: number;
-  totalInvoices: number;
-  stores: { storeId: string; storeName: string; province: string; revenueCents: number; discountCents: number; taxCents: number; tipCents: number; invoiceCount: number }[];
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Store { id: string; name: string }
+interface Staff { id: string; fullName: string; role: string }
+interface Report {
+  filters: { from: string; to: string; storeId: string | null; groomerId: string | null; period: string };
+  summary: { totalAppts: number; totalPets: number; earnedRevenueCents: number; expectedRevenueCents: number };
+  revenueTrend: { bucket: string; revenueCents: number }[];
+  revenueByStaff: { name: string; revenueCents: number; appts: number }[];
+  commissionByStaff: { name: string; commissionCents: number }[];
+  tipsByStaff: { name: string; tipsCents: number }[];
+  salesItems: { name: string; count: number; revenueCents: number }[];
+  paymentStatus: Record<string, number>;
+  salesByMethod: { tender: string; amountCents: number }[];
+  bookingsByStatus: Record<string, number>;
+  bookingsBySource: Record<string, number>;
+  revenueByLocation: { storeName: string; revenueCents: number; appts: number }[];
+  rates: { noShowRate: number; cancellationRate: number };
 }
-
-interface BookingsSummary {
-  total: number;
-  completionRate: number;
-  noShowRate: number;
-  byStatus: Record<string, number>;
-  bySource: Record<string, number>;
-  byStore: { storeId: string; storeName: string; total: number; completed: number; noShow: number; cancelled: number }[];
-}
-
-interface MembershipSummary {
-  activeMembers: number;
-  totalLoyaltyPoints: number;
-  byTier: { tier: string; count: number }[];
-}
-
-interface StaffHoursRow { fullName: string; storeName: string; totalHours: number }
-interface TopService { name: string; count: number; revenueCents: number }
+interface AuthMe { role: string; storeId: string | null; permissions: string[] }
 
 const fmt = (c: number) => `$${(c / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtK = (c: number) => c >= 100_000 ? `$${(c / 100_000).toFixed(1)}k` : fmt(c);
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
-const TIER_COLORS: Record<string, string> = {
-  SILVER: 'bg-neutral-200 text-neutral-700',
-  GOLD: 'bg-amber-200 text-amber-800',
-  PLATINUM: 'bg-violet-200 text-violet-800',
-};
+// Available report sections (the "graphs & charts selector")
+const SECTIONS = [
+  { key: 'summary', label: 'Summary' },
+  { key: 'revenue', label: 'Revenue trend' },
+  { key: 'revenueByStaff', label: 'Revenue by Staff' },
+  { key: 'commissionByStaff', label: 'Commission by Staff' },
+  { key: 'tipsByStaff', label: 'Tips by Staff' },
+  { key: 'salesItems', label: 'Sales Item' },
+  { key: 'paymentStatus', label: 'Payment Status' },
+  { key: 'salesByMethod', label: 'Sales by method' },
+  { key: 'bookingsByStatus', label: 'Bookings by Status' },
+  { key: 'bookingsBySource', label: 'Bookings by Source' },
+  { key: 'revenueByLocation', label: 'Revenue by Location' },
+  { key: 'rates', label: 'No-show / Cancellation rate' },
+];
 
-function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+// Horizontal bar chart (dependency-free)
+function BarChart({ rows, max, fmtVal, color = 'bg-brand' }: {
+  rows: { label: string; value: number }[]; max: number; fmtVal: (v: number) => string; color?: string;
+}) {
+  const m = Math.max(max, 1);
   return (
-    <div className={`rounded-xl border bg-white p-5 shadow-sm ${accent ?? ''}`}>
-      <p className="text-xs font-semibold uppercase text-neutral-400">{label}</p>
-      <p className="mt-1 text-3xl font-bold">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-neutral-500">{sub}</p>}
+    <div className="space-y-2">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-3 text-sm">
+          <span className="w-32 shrink-0 truncate text-neutral-600">{r.label}</span>
+          <div className="flex-1 h-5 rounded bg-neutral-100">
+            <div className={`h-5 rounded ${color} flex items-center justify-end px-2`} style={{ width: `${Math.max(4, Math.round(r.value / m * 100))}%` }}>
+              <span className="text-xs font-medium text-white whitespace-nowrap">{fmtVal(r.value)}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+      {rows.length === 0 && <p className="text-sm text-neutral-400">No data.</p>}
     </div>
   );
 }
 
-function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border bg-white p-5 shadow-sm break-inside-avoid">
+      <h2 className="mb-3 font-semibold">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 export default function AnalyticsPage() {
   const router = useRouter();
-  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 29); return isoDate(d); });
-  const [to, setTo] = useState(() => isoDate(new Date()));
-  const [revenue, setRevenue] = useState<RevenueSummary | null>(null);
-  const [bookings, setBookings] = useState<BookingsSummary | null>(null);
-  const [membership, setMembership] = useState<MembershipSummary | null>(null);
-  const [staff, setStaff] = useState<StaffHoursRow[]>([]);
-  const [services, setServices] = useState<TopService[]>([]);
+  const [me, setMe] = useState<AuthMe | null>(null);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [groomers, setGroomers] = useState<Staff[]>([]);
+  const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (f: string, t: string) => {
+  // Selectors
+  const [period, setPeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 29); return isoDate(d); });
+  const [to, setTo] = useState(() => isoDate(new Date()));
+  const [storeId, setStoreId] = useState('');
+  const [groomerId, setGroomerId] = useState('');
+  const [enabled, setEnabled] = useState<Set<string>>(new Set(SECTIONS.map(s => s.key)));
+  const [showSections, setShowSections] = useState(false);
+
+  const load = useCallback(async (params: { from: string; to: string; storeId: string; groomerId: string; period: string }) => {
     setLoading(true);
-    const qs = `from=${f}&to=${t}`;
-    const [rev, bk, mem, sh, svc] = await Promise.allSettled([
-      apiFetch<RevenueSummary>(`/analytics/revenue?${qs}`),
-      apiFetch<BookingsSummary>(`/analytics/bookings?${qs}`),
-      apiFetch<MembershipSummary>('/analytics/memberships'),
-      apiFetch<StaffHoursRow[]>(`/analytics/staff-hours?${qs}`),
-      apiFetch<TopService[]>(`/analytics/top-services?${qs}`),
-    ]);
-    if (rev.status === 'fulfilled') setRevenue(rev.value);
-    if (bk.status === 'fulfilled') setBookings(bk.value);
-    if (mem.status === 'fulfilled') setMembership(mem.value);
-    if (sh.status === 'fulfilled') setStaff(sh.value);
-    if (svc.status === 'fulfilled') setServices(svc.value);
+    const qs = new URLSearchParams({ from: params.from, to: params.to, period: params.period });
+    if (params.storeId) qs.set('storeId', params.storeId);
+    if (params.groomerId) qs.set('groomerId', params.groomerId);
+    const r = await apiFetch<Report>(`/analytics/report?${qs}`).catch(() => null);
+    setReport(r);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     if (!getToken()) { router.push('/login'); return; }
-    load(from, to);
-  }, [router, load, from, to]);
+    apiFetch<AuthMe>('/auth/me').then(async u => {
+      setMe(u);
+      if (!u.permissions.includes('analytics.view')) { router.push('/dashboard'); return; }
+      const [s, staff] = await Promise.all([
+        apiFetch<Store[]>('/customers/stores').catch(() => []),
+        apiFetch<Staff[]>('/staff').catch(() => []),
+      ]);
+      setStores(s);
+      setGroomers(staff.filter(u2 => u2.role === 'GROOMER' || u2.role === 'STORE_MANAGER'));
+      load({ from, to, storeId: '', groomerId: '', period: 'day' });
+    }).catch(() => router.push('/login'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
-  const maxRev = Math.max(...(revenue?.stores.map(s => s.revenueCents) ?? [1]));
-  const maxBk = Math.max(...(bookings?.byStore.map(s => s.total) ?? [1]));
+  function applyPeriodPreset(p: 'day' | 'week' | 'month' | 'year') {
+    setPeriod(p);
+    const today = new Date();
+    const start = new Date();
+    if (p === 'day') start.setDate(today.getDate() - 13);       // ~2 weeks of days
+    else if (p === 'week') start.setDate(today.getDate() - 7 * 11); // ~12 weeks
+    else if (p === 'month') start.setMonth(today.getMonth() - 11);  // 12 months
+    else start.setFullYear(today.getFullYear() - 4);                // 5 years
+    const f = isoDate(start), t = isoDate(today);
+    setFrom(f); setTo(t);
+    load({ from: f, to: t, storeId, groomerId, period: p });
+  }
+
+  function refresh() { load({ from, to, storeId, groomerId, period }); }
+
+  function toggleSection(key: string) {
+    setEnabled(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+
+  const on = (k: string) => enabled.has(k);
+  const r = report;
 
   return (
     <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
+      <style>{`@media print { .no-print { display: none !important; } .print-full { box-shadow:none !important; border:1px solid #eee !important; } body { background: white; } }`}</style>
+
+      <header className="no-print border-b bg-white px-6 py-4 flex items-center gap-3 flex-wrap">
         <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-        <h1 className="font-semibold">Franchise HQ Analytics</h1>
-        <span className="text-xs text-neutral-400 ml-1">§13</span>
-        <div className="ml-auto flex items-center gap-2">
-          <input type="date" className="rounded border px-2 py-1 text-sm" value={from} onChange={e => setFrom(e.target.value)} />
-          <span className="text-neutral-400 text-sm">to</span>
-          <input type="date" className="rounded border px-2 py-1 text-sm" value={to} onChange={e => setTo(e.target.value)} />
+        <h1 className="font-semibold">HQ Analytics</h1>
+
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {/* Period presets */}
+          <div className="flex rounded-lg border overflow-hidden">
+            {(['day', 'week', 'month', 'year'] as const).map(p => (
+              <button key={p} onClick={() => applyPeriodPreset(p)}
+                className={`px-3 py-1.5 text-xs font-medium capitalize ${period === p ? 'bg-brand text-white' : 'bg-white hover:bg-neutral-50'}`}>
+                {p === 'day' ? 'Daily' : p === 'week' ? 'Weekly' : p === 'month' ? 'Monthly' : 'Yearly'}
+              </button>
+            ))}
+          </div>
+          {/* Date range */}
+          <input type="date" className="rounded border px-2 py-1 text-xs" value={from} onChange={e => setFrom(e.target.value)} />
+          <span className="text-neutral-400 text-xs">to</span>
+          <input type="date" className="rounded border px-2 py-1 text-xs" value={to} onChange={e => setTo(e.target.value)} />
+          {/* Location */}
+          <select className="rounded border px-2 py-1.5 text-xs bg-white" value={storeId} onChange={e => setStoreId(e.target.value)}>
+            <option value="">All locations</option>
+            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {/* Groomer */}
+          <select className="rounded border px-2 py-1.5 text-xs bg-white" value={groomerId} onChange={e => setGroomerId(e.target.value)}>
+            <option value="">All groomers</option>
+            {groomers.map(g => <option key={g.id} value={g.id}>{g.fullName}</option>)}
+          </select>
+          {/* Sections */}
+          <div className="relative">
+            <button onClick={() => setShowSections(s => !s)} className="rounded border px-3 py-1.5 text-xs font-medium hover:bg-neutral-50">
+              Sections ({enabled.size})
+            </button>
+            {showSections && (
+              <div className="absolute right-0 z-20 mt-1 w-60 rounded-xl border bg-white p-3 shadow-xl">
+                <div className="flex justify-between mb-2">
+                  <button onClick={() => setEnabled(new Set(SECTIONS.map(s => s.key)))} className="text-xs text-brand">Select All</button>
+                  <button onClick={() => setEnabled(new Set())} className="text-xs text-brand">Deselect All</button>
+                </div>
+                <div className="space-y-1 max-h-72 overflow-y-auto">
+                  {SECTIONS.map(s => (
+                    <label key={s.key} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer">
+                      <input type="checkbox" checked={on(s.key)} onChange={() => toggleSection(s.key)} />
+                      {s.label}
+                    </label>
+                  ))}
+                </div>
+                <button onClick={() => setShowSections(false)} className="mt-2 w-full rounded-md bg-brand py-1.5 text-xs font-medium text-white">Apply</button>
+              </div>
+            )}
+          </div>
+          <button onClick={refresh} className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white">Run</button>
+          <button onClick={() => window.print()} className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-neutral-900">Download PDF</button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8 space-y-8">
-        {loading && <p className="text-sm text-neutral-400">Loading analytics…</p>}
+      {/* Print header */}
+      <div className="hidden print:block px-6 pt-4">
+        <h1 className="text-xl font-bold">OmniPOS Analytics Report</h1>
+        <p className="text-sm text-neutral-500">
+          {from} → {to} · {period} · {storeId ? stores.find(s => s.id === storeId)?.name : 'All locations'} · {groomerId ? groomers.find(g => g.id === groomerId)?.fullName : 'All groomers'}
+        </p>
+      </div>
 
-        {/* KPI row */}
-        {revenue && bookings && membership && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Total revenue" value={fmtK(revenue.totalRevenueCents)} sub={`${revenue.totalInvoices} invoices`} />
-            <StatCard label="Bookings" value={String(bookings.total)} sub={`${bookings.completionRate}% completion rate`} />
-            <StatCard label="Active members" value={String(membership.activeMembers)} sub={`${(membership.totalLoyaltyPoints).toLocaleString()} pts outstanding`} />
-            <StatCard label="No-show rate" value={`${bookings.noShowRate}%`} accent={bookings.noShowRate > 10 ? 'border-amber-200' : ''} />
-          </div>
-        )}
-
-        {/* Revenue by store */}
-        {revenue && (
-          <section>
-            <h2 className="mb-3 font-semibold">Revenue by store</h2>
-            <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-50 text-xs uppercase text-neutral-500 tracking-wide">
-                  <tr>{['Store', 'Province', 'Revenue', 'Discount', 'Tax', 'Tips', 'Invoices', 'Share'].map(h => <th key={h} className="px-4 py-3 text-left">{h}</th>)}</tr>
-                </thead>
-                <tbody className="divide-y">
-                  {revenue.stores.map(s => (
-                    <tr key={s.storeId} className="hover:bg-neutral-50">
-                      <td className="px-4 py-3 font-medium">{s.storeName}</td>
-                      <td className="px-4 py-3 text-neutral-500">{s.province}</td>
-                      <td className="px-4 py-3 font-semibold text-green-700">{fmt(s.revenueCents)}</td>
-                      <td className="px-4 py-3 text-red-500">{s.discountCents > 0 ? `-${fmt(s.discountCents)}` : '—'}</td>
-                      <td className="px-4 py-3 text-neutral-500">{fmt(s.taxCents)}</td>
-                      <td className="px-4 py-3 text-neutral-500">{fmt(s.tipCents)}</td>
-                      <td className="px-4 py-3">{s.invoiceCount}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 flex-1 rounded-full bg-neutral-100">
-                            <div className="h-2 rounded-full bg-brand" style={{ width: `${Math.round(s.revenueCents / maxRev * 100)}%` }} />
-                          </div>
-                          <span className="text-xs text-neutral-500">{Math.round(s.revenueCents / revenue.totalRevenueCents * 100)}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="bg-neutral-50 font-semibold">
-                    <td className="px-4 py-3" colSpan={2}>Total</td>
-                    <td className="px-4 py-3 text-green-700">{fmt(revenue.totalRevenueCents)}</td>
-                    <td colSpan={5} />
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {/* Bookings + membership split */}
-        <div className="grid grid-cols-2 gap-6">
-          {/* Bookings by store */}
-          {bookings && (
-            <section>
-              <h2 className="mb-3 font-semibold">Bookings by store</h2>
-              <div className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
-                {bookings.byStore.map(s => (
-                  <div key={s.storeId}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="font-medium">{s.storeName}</span>
-                      <span className="text-neutral-500">{s.total}</span>
+      <main className="mx-auto max-w-5xl px-6 py-6 space-y-5">
+        {loading && <p className="text-sm text-neutral-400">Loading…</p>}
+        {!loading && r && (
+          <>
+            {/* Summary */}
+            {on('summary') && (
+              <Section title="Summary">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    ['Total appts', String(r.summary.totalAppts)],
+                    ['Total pets', String(r.summary.totalPets)],
+                    ['Earned revenue', fmt(r.summary.earnedRevenueCents)],
+                    ['Expected revenue', fmt(r.summary.expectedRevenueCents)],
+                  ].map(([label, val]) => (
+                    <div key={label}>
+                      <p className="text-xs text-neutral-400 uppercase">{label}</p>
+                      <p className="mt-1 text-2xl font-bold">{val}</p>
                     </div>
-                    <div className="flex gap-0.5 h-2 rounded-full overflow-hidden bg-neutral-100">
-                      <div className="bg-green-400" style={{ width: `${s.total > 0 ? s.completed / s.total * 100 : 0}%` }} />
-                      <div className="bg-amber-400" style={{ width: `${s.total > 0 ? s.cancelled / s.total * 100 : 0}%` }} />
-                      <div className="bg-red-400" style={{ width: `${s.total > 0 ? s.noShow / s.total * 100 : 0}%` }} />
-                    </div>
-                    <div className="flex gap-3 mt-1 text-xs text-neutral-400">
-                      <span className="text-green-600">{s.completed} done</span>
-                      <span className="text-amber-600">{s.cancelled} cancel</span>
-                      <span className="text-red-500">{s.noShow} no-show</span>
-                    </div>
-                  </div>
-                ))}
-                <div className="pt-2 border-t flex gap-4 text-xs text-neutral-500">
-                  {Object.entries(bookings.bySource).map(([src, count]) => (
-                    <span key={src}>{src}: {count}</span>
                   ))}
                 </div>
-              </div>
-            </section>
-          )}
+              </Section>
+            )}
 
-          {/* Membership tiers */}
-          {membership && (
-            <section>
-              <h2 className="mb-3 font-semibold">Membership breakdown</h2>
-              <div className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
-                {membership.byTier.map(t => (
-                  <div key={t.tier} className="flex items-center justify-between">
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${TIER_COLORS[t.tier] ?? 'bg-neutral-200 text-neutral-700'}`}>{t.tier}</span>
-                    <div className="flex items-center gap-3">
-                      <div className="w-32 h-2 rounded-full bg-neutral-100">
-                        <div className="h-2 rounded-full bg-violet-400" style={{ width: `${membership.activeMembers > 0 ? t.count / membership.activeMembers * 100 : 0}%` }} />
-                      </div>
-                      <span className="text-sm font-medium w-8 text-right">{t.count}</span>
-                    </div>
+            {/* Revenue trend */}
+            {on('revenue') && (
+              <Section title={`Revenue trend (by ${period})`}>
+                <BarChart rows={r.revenueTrend.map(t => ({ label: t.bucket, value: t.revenueCents }))}
+                  max={Math.max(...r.revenueTrend.map(t => t.revenueCents), 1)} fmtVal={fmt} color="bg-emerald-500" />
+              </Section>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-5">
+              {on('revenueByStaff') && (
+                <Section title="Revenue by Staff">
+                  <BarChart rows={r.revenueByStaff.map(s => ({ label: s.name, value: s.revenueCents }))}
+                    max={Math.max(...r.revenueByStaff.map(s => s.revenueCents), 1)} fmtVal={fmt} />
+                </Section>
+              )}
+              {on('commissionByStaff') && (
+                <Section title="Commission by Staff">
+                  <BarChart rows={r.commissionByStaff.map(s => ({ label: s.name, value: s.commissionCents }))}
+                    max={Math.max(...r.commissionByStaff.map(s => s.commissionCents), 1)} fmtVal={fmt} color="bg-violet-500" />
+                </Section>
+              )}
+              {on('tipsByStaff') && (
+                <Section title="Tips by Staff">
+                  <BarChart rows={r.tipsByStaff.map(s => ({ label: s.name, value: s.tipsCents }))}
+                    max={Math.max(...r.tipsByStaff.map(s => s.tipsCents), 1)} fmtVal={fmt} color="bg-pink-500" />
+                </Section>
+              )}
+              {on('salesByMethod') && (
+                <Section title="Sales by method">
+                  <BarChart rows={r.salesByMethod.map(s => ({ label: s.tender.replace(/_/g, ' '), value: s.amountCents }))}
+                    max={Math.max(...r.salesByMethod.map(s => s.amountCents), 1)} fmtVal={fmt} color="bg-sky-500" />
+                </Section>
+              )}
+            </div>
+
+            {/* Sales items */}
+            {on('salesItems') && (
+              <Section title="Sales Item">
+                <div className="overflow-hidden rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-neutral-50 text-xs uppercase text-neutral-500"><tr>{['Item', 'Count', 'Revenue'].map(h => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr></thead>
+                    <tbody className="divide-y">
+                      {r.salesItems.map(s => (
+                        <tr key={s.name}><td className="px-4 py-2">{s.name}</td><td className="px-4 py-2">{s.count}</td><td className="px-4 py-2 font-medium text-green-700">{fmt(s.revenueCents)}</td></tr>
+                      ))}
+                      {r.salesItems.length === 0 && <tr><td colSpan={3} className="px-4 py-4 text-center text-neutral-400">No sales.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Section>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-5">
+              {on('paymentStatus') && (
+                <Section title="Payment Status">
+                  <div className="space-y-1 text-sm">
+                    {Object.entries(r.paymentStatus).map(([k, v]) => (
+                      <div key={k} className="flex justify-between"><span className="text-neutral-500">{k}</span><span className="font-medium">{v}</span></div>
+                    ))}
                   </div>
-                ))}
-                <p className="text-xs text-neutral-400 pt-1 border-t">
-                  {membership.totalLoyaltyPoints.toLocaleString()} total loyalty points outstanding
-                </p>
-              </div>
-            </section>
-          )}
-        </div>
-
-        {/* Top services + staff hours */}
-        <div className="grid grid-cols-2 gap-6">
-          {services.length > 0 && (
-            <section>
-              <h2 className="mb-3 font-semibold">Top services</h2>
-              <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-                <table className="w-full text-sm">
-                  <thead className="bg-neutral-50 text-xs uppercase text-neutral-500 tracking-wide">
-                    <tr>{['Service', 'Count', 'Revenue'].map(h => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {services.map((s, i) => (
-                      <tr key={s.name} className="hover:bg-neutral-50">
-                        <td className="px-4 py-2 flex items-center gap-2">
-                          <span className="text-xs text-neutral-400 w-4">{i + 1}</span>
-                          {s.name}
-                        </td>
-                        <td className="px-4 py-2">{s.count}</td>
-                        <td className="px-4 py-2 font-medium text-green-700">{fmt(s.revenueCents)}</td>
-                      </tr>
+                </Section>
+              )}
+              {on('bookingsByStatus') && (
+                <Section title="Bookings by Status">
+                  <div className="space-y-1 text-sm">
+                    {Object.entries(r.bookingsByStatus).map(([k, v]) => (
+                      <div key={k} className="flex justify-between"><span className="text-neutral-500">{k.replace(/_/g, ' ')}</span><span className="font-medium">{v}</span></div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {staff.length > 0 && (
-            <section>
-              <h2 className="mb-3 font-semibold">Staff hours</h2>
-              <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-                <table className="w-full text-sm">
-                  <thead className="bg-neutral-50 text-xs uppercase text-neutral-500 tracking-wide">
-                    <tr>{['Staff', 'Store', 'Hours'].map(h => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {staff.map(s => (
-                      <tr key={s.fullName} className="hover:bg-neutral-50">
-                        <td className="px-4 py-2 font-medium">{s.fullName}</td>
-                        <td className="px-4 py-2 text-neutral-500">{s.storeName}</td>
-                        <td className="px-4 py-2">{s.totalHours}h</td>
-                      </tr>
+                  </div>
+                </Section>
+              )}
+              {on('bookingsBySource') && (
+                <Section title="Bookings by Source">
+                  <div className="space-y-1 text-sm">
+                    {Object.entries(r.bookingsBySource).map(([k, v]) => (
+                      <div key={k} className="flex justify-between"><span className="text-neutral-500">{k}</span><span className="font-medium">{v}</span></div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-        </div>
+                  </div>
+                </Section>
+              )}
+              {on('rates') && (
+                <Section title="No-show / Cancellation">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><p className="text-xs text-neutral-400 uppercase">No-show rate</p><p className={`text-2xl font-bold ${r.rates.noShowRate > 10 ? 'text-amber-600' : ''}`}>{r.rates.noShowRate}%</p></div>
+                    <div><p className="text-xs text-neutral-400 uppercase">Cancellation rate</p><p className="text-2xl font-bold">{r.rates.cancellationRate}%</p></div>
+                  </div>
+                </Section>
+              )}
+            </div>
+
+            {/* Revenue by location */}
+            {on('revenueByLocation') && !storeId && (
+              <Section title="Revenue by Location">
+                <BarChart rows={r.revenueByLocation.map(l => ({ label: l.storeName, value: l.revenueCents }))}
+                  max={Math.max(...r.revenueByLocation.map(l => l.revenueCents), 1)} fmtVal={fmt} color="bg-indigo-500" />
+              </Section>
+            )}
+          </>
+        )}
       </main>
     </div>
   );
