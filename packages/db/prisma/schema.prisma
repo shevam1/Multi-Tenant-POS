@@ -230,6 +230,8 @@ model Customer {
   city            String?
   postalCode      String?
   membershipTier  String?
+  /// Stripe customer ID for subscriptions + card-on-file.
+  stripeCustomerId String?
   preferredStoreId String?
   emergencyContact String?
   /// Colored tags surfaced on cards (e.g. VIP, Cash Only).

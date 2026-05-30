@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { StripeService } from '../stripe/stripe.service';
 
 export interface SavePlanDto {
   tier: string;
@@ -21,6 +22,7 @@ export class MembershipsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly stripe: StripeService,
   ) {}
 
   // ── Plans ───────────────────────────────────────────────────────────────
@@ -60,17 +62,56 @@ export class MembershipsService {
   }
 
   async enroll(customerId: string, planId: string, tenantId: string) {
-    const plan = await this.prisma.db.membershipPlan.findUnique({ where: { id: planId } });
+    const [plan, customer] = await Promise.all([
+      this.prisma.db.membershipPlan.findUnique({ where: { id: planId } }),
+      this.prisma.db.customer.findUnique({ where: { id: customerId } }),
+    ]);
     if (!plan) throw new NotFoundException('Plan not found');
+    if (!customer) throw new NotFoundException('Customer not found');
 
-    // Cancel any existing active membership first
-    await this.prisma.db.membership.updateMany({
-      where: { customerId, status: 'ACTIVE' },
-      data: { status: 'CANCELLED' },
-    });
+    // Cancel existing active membership in DB + Stripe
+    const existing = await this.activeMembership(customerId);
+    if (existing) {
+      if (existing.stripeSubscriptionId) {
+        await this.stripe.cancelSubscription(existing.stripeSubscriptionId).catch(() => null);
+      }
+      await this.prisma.db.membership.update({ where: { id: existing.id }, data: { status: 'CANCELLED' } });
+    }
 
-    const periodEnd = new Date();
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    // Ensure a Stripe customer record exists
+    let stripeCustomerId = customer.stripeCustomerId;
+    if (this.stripe.enabled) {
+      stripeCustomerId = await this.stripe.ensureCustomer({
+        customerId,
+        email: customer.email,
+        name: customer.fullName,
+        stripeCustomerId: customer.stripeCustomerId,
+      });
+      if (stripeCustomerId && stripeCustomerId !== customer.stripeCustomerId) {
+        await this.prisma.db.customer.update({
+          where: { id: customerId },
+          data: { stripeCustomerId },
+        });
+      }
+    }
+
+    // Create Stripe subscription (if key is live and plan has a price)
+    let stripeSubscriptionId: string | null = null;
+    let currentPeriodEnd = new Date();
+    currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+
+    if (this.stripe.enabled && plan.stripePriceId && stripeCustomerId) {
+      const sub = await this.stripe.createSubscription({
+        stripeCustomerId,
+        stripePriceId: plan.stripePriceId,
+        trialDays: 0,
+        metadata: { tenantId, customerId, planTier: plan.tier },
+      });
+      if (sub) {
+        stripeSubscriptionId = sub.subscriptionId;
+        currentPeriodEnd = sub.currentPeriodEnd;
+      }
+    }
 
     const membership = await this.prisma.db.membership.create({
       data: {
@@ -78,36 +119,44 @@ export class MembershipsService {
         customerId,
         planId,
         status: 'ACTIVE',
-        currentPeriodEnd: periodEnd,
-        // In production a Stripe subscription would be created here via the
-        // Stripe adapter; in test/demo mode we track the membership locally.
+        currentPeriodEnd,
+        stripeSubscriptionId,
       },
       include: { plan: true },
     });
 
-    // Mirror the tier label onto the customer for quick display / pricing rules
+    // Mirror tier label onto customer for quick display / pricing rules
     await this.prisma.db.customer.update({
       where: { id: customerId },
       data: { membershipTier: plan.tier },
     });
 
-    await this.audit.log({ action: 'MEMBERSHIP_ENROLL', entityType: 'membership', entityId: membership.id, metadata: { tier: plan.tier } });
+    await this.audit.log({
+      action: 'MEMBERSHIP_ENROLL',
+      entityType: 'membership',
+      entityId: membership.id,
+      metadata: { tier: plan.tier, stripeSubscriptionId },
+    });
     return membership;
   }
 
   async cancel(customerId: string) {
     const active = await this.activeMembership(customerId);
     if (!active) throw new BadRequestException('No active membership to cancel');
+
+    // Cancel in Stripe
+    if (active.stripeSubscriptionId) {
+      await this.stripe.cancelSubscription(active.stripeSubscriptionId).catch(() => null);
+    }
+
     await this.prisma.db.membership.update({ where: { id: active.id }, data: { status: 'CANCELLED' } });
     await this.prisma.db.customer.update({ where: { id: customerId }, data: { membershipTier: null } });
     await this.audit.log({ action: 'MEMBERSHIP_CANCEL', entityType: 'membership', entityId: active.id });
     return { cancelled: true };
   }
 
-  /**
-   * Member benefits applied to a service subtotal, for display + checkout.
-   * Returns discountCents (member discount) and the points multiplier.
-   */
+  // ── Benefits / discount ──────────────────────────────────────────────────
+
   async benefitsFor(customerId: string, serviceSubtotalCents: number) {
     const membership = await this.activeMembership(customerId);
     if (!membership) return { tier: null, discountCents: 0, pointsMultiplier: 1, benefits: [] as string[] };
@@ -139,7 +188,6 @@ export class MembershipsService {
     });
   }
 
-  /** Record a points delta + update the running balance atomically. */
   async addPoints(customerId: string, points: number, reason: string, tenantId: string, bookingId?: string) {
     if (points === 0) return;
     await this.prisma.db.loyaltyTransaction.create({
@@ -151,10 +199,6 @@ export class MembershipsService {
     });
   }
 
-  /**
-   * Accrue points for a completed checkout (spec §11 loyalty engine):
-   * visit bonus + spend-based points × the member multiplier.
-   */
   async accrueForCheckout(customerId: string, netTotalCents: number, tenantId: string, bookingId: string) {
     const { pointsMultiplier } = await this.benefitsFor(customerId, 0);
     const spendPoints = Math.floor((netTotalCents / 100) * POINTS_PER_DOLLAR);

@@ -20,12 +20,15 @@ import { VaccinationsModule } from './vaccinations/vaccinations.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { FormsModule } from './forms/forms.module';
 import { MembershipsModule } from './memberships/memberships.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { StripeModule } from './stripe/stripe.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
     ScheduleModule.forRoot(),
+    StripeModule,
     PrismaModule,
     AuditModule,
     RealtimeModule,
@@ -39,6 +42,7 @@ import { MembershipsModule } from './memberships/memberships.module';
     SchedulingModule,
     FormsModule,
     MembershipsModule,
+    AnalyticsModule,
   ],
   controllers: [HealthController],
   providers: [

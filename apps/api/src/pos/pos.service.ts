@@ -2,22 +2,19 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { computeCheckout } from '@omnipos/core';
 import type { Province } from '@omnipos/core';
 import type { TenderType } from '@omnipos/db';
-import Stripe from 'stripe';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MembershipsService } from '../memberships/memberships.service';
+import { StripeService } from '../stripe/stripe.service';
 import type { CheckoutDto } from './dto/checkout.dto';
 
 @Injectable()
 export class PosService {
-  private readonly stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
-    apiVersion: '2025-02-24.acacia',
-  });
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly memberships: MembershipsService,
+    private readonly stripe: StripeService,
   ) {}
 
   async getStore(storeId: string) {
@@ -46,8 +43,7 @@ export class PosService {
 
     const province = booking.store.province as Province;
 
-    // Member discount (spec §11): auto-apply the customer's tier discount to the
-    // service subtotal, stacked on top of any statement credit the cashier applies.
+    // Member discount (spec §11): auto-apply tier discount on top of statement credit.
     const serviceSubtotal = dto.lines.reduce((s, l) => s + l.amountCents, 0);
     const memberBenefits = await this.memberships.benefitsFor(booking.customerId, serviceSubtotal);
     const statementCreditRequested = dto.discountCents ?? 0;
@@ -61,7 +57,7 @@ export class PosService {
       lines: dto.lines,
     });
 
-    // Deduct statement credit (only the portion the cashier chose, not the member discount)
+    // Deduct statement credit
     if (statementCreditRequested > 0 && booking.customer.statementCreditCents > 0) {
       const deduct = Math.min(statementCreditRequested, booking.customer.statementCreditCents);
       await this.prisma.db.customer.update({
@@ -70,25 +66,20 @@ export class PosService {
       });
     }
 
-    // Process Stripe payment (card/wallet)
+    // Process Stripe PaymentIntent (card / mobile wallet)
     let stripePaymentIntentId: string | undefined;
-    if ((dto.tender === 'CARD' || dto.tender === 'MOBILE_WALLET') && dto.stripePaymentMethodId && process.env.STRIPE_SECRET_KEY?.startsWith('sk_')) {
-      try {
-        const pi = await this.stripe.paymentIntents.create({
-          amount: result.totalCents,
-          currency: 'cad',
-          payment_method: dto.stripePaymentMethodId,
-          confirm: true,
-          automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-          metadata: { bookingId, tenantId },
-        });
-        stripePaymentIntentId = pi.id;
-      } catch {
-        // Fall through in test mode where paymentMethod isn't attached to a customer
-      }
+    if ((dto.tender === 'CARD' || dto.tender === 'MOBILE_WALLET') && this.stripe.enabled) {
+      const pi = await this.stripe.createPaymentIntent({
+        amountCents: result.totalCents,
+        currency: 'cad',
+        stripeCustomerId: booking.customer.stripeCustomerId,
+        paymentMethodId: dto.stripePaymentMethodId ?? null,
+        metadata: { bookingId, tenantId },
+      });
+      if (pi) stripePaymentIntentId = pi.id;
     }
 
-    // Create invoice + tax lines + payment + close booking
+    // Create invoice + tax lines + payment record + close booking
     const invoice = await this.prisma.db.invoice.create({
       data: {
         tenantId,
@@ -131,11 +122,8 @@ export class PosService {
     });
 
     await this.prisma.db.booking.update({ where: { id: bookingId }, data: { status: 'COMPLETED' } });
-
-    // Deduct consumable inventory
     await this.deductInventory(booking.storeId, tenantId);
 
-    // Accrue loyalty points for the spend (spec §11 loyalty engine)
     const loyalty = await this.memberships.accrueForCheckout(
       booking.customerId,
       result.netTotalCents,
@@ -147,7 +135,14 @@ export class PosService {
       action: 'CHECKOUT',
       entityType: 'invoice',
       entityId: invoice.id,
-      metadata: { totalCents: result.totalCents, province, tender: dto.tender, memberTier: memberBenefits.tier, pointsEarned: loyalty.earned },
+      metadata: {
+        totalCents: result.totalCents,
+        province,
+        tender: dto.tender,
+        memberTier: memberBenefits.tier,
+        pointsEarned: loyalty.earned,
+        stripePaymentIntentId,
+      },
     });
 
     return {
@@ -170,26 +165,31 @@ export class PosService {
     }
   }
 
-  /** Create a Stripe SetupIntent for card-on-file (used at booking time). */
+  /** Create a Stripe SetupIntent for card-on-file (booking intake). */
   async createSetupIntent(customerId: string) {
-    const c = await this.prisma.db.customer.findUnique({ where: { id: customerId } });
-    if (!c) throw new NotFoundException('Customer not found');
+    const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
 
-    let stripeCustomerId: string | undefined;
-    // stripeCustomerId is stored on the booking, not the customer model directly
-    if (!stripeCustomerId && process.env.STRIPE_SECRET_KEY?.startsWith('sk_')) {
-      const sc = await this.stripe.customers.create({ email: c.email ?? undefined, name: c.fullName });
-      stripeCustomerId = sc.id;
-    }
-
-    if (!process.env.STRIPE_SECRET_KEY?.startsWith('sk_')) {
+    if (!this.stripe.enabled) {
       return { clientSecret: 'seti_test_placeholder', stripeCustomerId: 'cus_test' };
     }
 
-    const si = await this.stripe.setupIntents.create({
-      customer: stripeCustomerId,
-      payment_method_types: ['card'],
+    // Ensure Stripe customer
+    const stripeCustomerId = await this.stripe.ensureCustomer({
+      customerId,
+      email: customer.email,
+      name: customer.fullName,
+      stripeCustomerId: customer.stripeCustomerId,
     });
-    return { clientSecret: si.client_secret, stripeCustomerId };
+
+    if (stripeCustomerId && stripeCustomerId !== customer.stripeCustomerId) {
+      await this.prisma.db.customer.update({
+        where: { id: customerId },
+        data: { stripeCustomerId },
+      });
+    }
+
+    const si = await this.stripe.createSetupIntent(stripeCustomerId!);
+    return { clientSecret: si?.clientSecret ?? null, stripeCustomerId };
   }
 }
