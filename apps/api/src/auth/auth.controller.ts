@@ -14,9 +14,9 @@ export class AuthController {
     return this.auth.login(dto);
   }
 
-  /** Returns the current authenticated user (verifies the token + context). */
+  /** Returns the current authenticated user with live profile + permissions. */
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
-    return user;
+    return this.auth.me(user.userId);
   }
 }

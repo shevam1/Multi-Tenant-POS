@@ -22,6 +22,7 @@ import { FormsModule } from './forms/forms.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { StripeModule } from './stripe/stripe.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { StripeModule } from './stripe/stripe.module';
     FormsModule,
     MembershipsModule,
     AnalyticsModule,
+    StaffModule,
   ],
   controllers: [HealthController],
   providers: [

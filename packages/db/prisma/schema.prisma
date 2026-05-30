@@ -194,6 +194,10 @@ model User {
   fullName     String
   role         UserRole
   active       Boolean  @default(true)
+  /// Per-user permission overrides. Empty = inherit the role's default permission set.
+  permissions  String[] @default([])
+  /// Optional override of the password (forces reset on next login when true).
+  mustResetPassword Boolean @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

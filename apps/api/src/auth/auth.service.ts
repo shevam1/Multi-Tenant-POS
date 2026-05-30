@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUser, JwtPayload } from './auth.types';
 import type { LoginDto } from './dto/login.dto';
+import { effectivePermissions } from './permissions';
 
 @Injectable()
 export class AuthService {
@@ -55,5 +56,24 @@ export class AuthService {
     };
 
     return { accessToken: await this.jwt.signAsync(payload), user: authUser };
+  }
+
+  /** Live profile + effective permissions for the authenticated user. */
+  async me(userId: string) {
+    const user = await this.prisma.db.user.findUnique({
+      where: { id: userId },
+      include: { store: { select: { id: true, name: true } } },
+    });
+    if (!user) return null;
+    return {
+      userId: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      storeId: user.storeId,
+      storeName: user.store?.name ?? null,
+      email: user.email,
+      fullName: user.fullName,
+      permissions: effectivePermissions(user.role, user.permissions),
+    };
   }
 }

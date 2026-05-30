@@ -20,8 +20,12 @@ interface AuthUser {
   tenantId: string;
   role: string;
   storeId: string | null;
+  storeName?: string | null;
   fullName: string;
+  permissions?: string[];
 }
+
+interface Store { id: string; name: string }
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
@@ -47,6 +51,7 @@ export default function DashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [today] = useState(() => new Date().toISOString().slice(0, 10));
   const [storeId, setStoreId] = useState('');
+  const [stores, setStores] = useState<Store[]>([]);
   const [newBookingAlert, setNewBookingAlert] = useState(false);
 
   const fetchMe = useCallback(async () => {
@@ -65,7 +70,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchMe().then(me => {
-      if (me?.storeId) {
+      if (!me) return;
+      const isHQ = me.role === 'FRANCHISE_HQ_ADMIN';
+      if (isHQ) {
+        // HQ admin: load stores and default to the first one (location selector)
+        apiFetch<Store[]>('/customers/stores').then(s => {
+          setStores(s);
+          const first = s[0]?.id ?? '';
+          setStoreId(first);
+          if (first) fetchBookings(first);
+        }).catch(() => {});
+      } else if (me.storeId) {
         setStoreId(me.storeId);
         fetchBookings(me.storeId);
       }
@@ -102,8 +117,20 @@ export default function DashboardPage() {
           <span className="text-sm font-semibold text-brand">OmniPOS</span>
           <span className="ml-2 text-sm text-neutral-500">Admin</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap justify-end">
           {user && <span className="text-sm text-neutral-600">{user.fullName} · {user.role.replace(/_/g,' ')}</span>}
+          {/* HQ location selector */}
+          {user?.role === 'FRANCHISE_HQ_ADMIN' && stores.length > 0 && (
+            <select className="rounded-md border px-2 py-1.5 text-xs bg-white" value={storeId}
+              onChange={e => { setStoreId(e.target.value); fetchBookings(e.target.value); }}>
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          {user?.permissions?.includes('staff.manage') && (
+            <a href="/staff" className="rounded-md bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-300">
+              Staff
+            </a>
+          )}
           <a href="/scheduling" className="rounded-md bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200">
             Schedule
           </a>
