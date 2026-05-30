@@ -20,6 +20,15 @@ datasource db {
 // Enums
 // ============================================================
 
+/// CRM lifecycle status for a customer record.
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  LEAD
+  DELETED
+}
+
 /// Industry vertical a tenant runs. Drives which domain module is loaded.
 enum IndustryType {
   PET_GROOMING
@@ -229,6 +238,8 @@ model Customer {
   addressLine     String?
   city            String?
   postalCode      String?
+  /// CRM lifecycle status — soft-delete uses DELETED.
+  status          CustomerStatus @default(ACTIVE)
   membershipTier  String?
   /// Stripe customer ID for subscriptions + card-on-file.
   stripeCustomerId String?

@@ -10,4 +10,6 @@ export class CreateCustomerDto {
   @IsOptional() @IsString() membershipTier?: string;
   @IsOptional() @IsString() emergencyContact?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsString() preferredStoreId?: string;
 }
