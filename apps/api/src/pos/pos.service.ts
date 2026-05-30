@@ -5,6 +5,7 @@ import type { TenderType } from '@omnipos/db';
 import Stripe from 'stripe';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MembershipsService } from '../memberships/memberships.service';
 import type { CheckoutDto } from './dto/checkout.dto';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class PosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly memberships: MembershipsService,
   ) {}
 
   async getStore(storeId: string) {
@@ -43,17 +45,25 @@ export class PosService {
     if (booking.invoice) throw new BadRequestException('Invoice already exists for this booking');
 
     const province = booking.store.province as Province;
+
+    // Member discount (spec §11): auto-apply the customer's tier discount to the
+    // service subtotal, stacked on top of any statement credit the cashier applies.
+    const serviceSubtotal = dto.lines.reduce((s, l) => s + l.amountCents, 0);
+    const memberBenefits = await this.memberships.benefitsFor(booking.customerId, serviceSubtotal);
+    const statementCreditRequested = dto.discountCents ?? 0;
+    const totalDiscount = statementCreditRequested + memberBenefits.discountCents;
+
     const result = computeCheckout({
       province,
       tender: dto.tender as TenderType,
-      discountCents: dto.discountCents ?? 0,
+      discountCents: totalDiscount,
       tipCents: dto.tipCents ?? 0,
       lines: dto.lines,
     });
 
-    // Deduct statement credit from customer
-    if ((dto.discountCents ?? 0) > 0 && booking.customer.statementCreditCents > 0) {
-      const deduct = Math.min(dto.discountCents ?? 0, booking.customer.statementCreditCents);
+    // Deduct statement credit (only the portion the cashier chose, not the member discount)
+    if (statementCreditRequested > 0 && booking.customer.statementCreditCents > 0) {
+      const deduct = Math.min(statementCreditRequested, booking.customer.statementCreditCents);
       await this.prisma.db.customer.update({
         where: { id: booking.customerId },
         data: { statementCreditCents: { decrement: deduct } },
@@ -125,14 +135,27 @@ export class PosService {
     // Deduct consumable inventory
     await this.deductInventory(booking.storeId, tenantId);
 
+    // Accrue loyalty points for the spend (spec §11 loyalty engine)
+    const loyalty = await this.memberships.accrueForCheckout(
+      booking.customerId,
+      result.netTotalCents,
+      tenantId,
+      bookingId,
+    );
+
     await this.audit.log({
       action: 'CHECKOUT',
       entityType: 'invoice',
       entityId: invoice.id,
-      metadata: { totalCents: result.totalCents, province, tender: dto.tender },
+      metadata: { totalCents: result.totalCents, province, tender: dto.tender, memberTier: memberBenefits.tier, pointsEarned: loyalty.earned },
     });
 
-    return { invoice, checkout: result };
+    return {
+      invoice,
+      checkout: result,
+      member: { tier: memberBenefits.tier, discountCents: memberBenefits.discountCents },
+      loyalty,
+    };
   }
 
   private async deductInventory(storeId: string, tenantId: string) {

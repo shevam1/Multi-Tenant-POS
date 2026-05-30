@@ -41,7 +41,10 @@ BEGIN
       ('shift_schedule',         'tenantId'),
       ('timeclock_entry',        'tenantId'),
       ('leave_request',          'tenantId'),
-      ('form_template',          'tenantId')
+      ('form_template',          'tenantId'),
+      ('membership_plan',        'tenantId'),
+      ('membership',             'tenantId'),
+      ('loyalty_transaction',    'tenantId')
     ) AS v(table_name, tenant_col)
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t.table_name);

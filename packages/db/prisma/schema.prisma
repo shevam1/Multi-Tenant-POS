@@ -141,6 +141,9 @@ model Tenant {
   timeclockEntries TimeclockEntry[]
   leaveRequests    LeaveRequest[]
   formTemplates    FormTemplate[]
+  membershipPlans  MembershipPlan[]
+  memberships      Membership[]
+  loyaltyTransactions LoyaltyTransaction[]
 
   @@map("tenant")
 }
@@ -233,6 +236,8 @@ model Customer {
   tags            String[] @default([])
   /// Prepaid ledger balance auto-applied at checkout (statement credits).
   statementCreditCents Int @default(0)
+  /// Running loyalty points balance (spec §11 loyalty engine).
+  loyaltyPoints   Int @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -240,6 +245,8 @@ model Customer {
   pets     Pet[]
   bookings Booking[]
   consents CommunicationConsent[]
+  memberships         Membership[]
+  loyaltyTransactions LoyaltyTransaction[]
 
   @@index([tenantId])
   @@index([tenantId, phone])
@@ -662,4 +669,79 @@ model LeaveRequest {
   @@index([tenantId, storeId])
   @@index([userId])
   @@map("leave_request")
+}
+
+// ── Membership & loyalty (spec §11) ──────────────────────────────────────────
+
+enum MembershipStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+}
+
+/// A subscription tier offered by the tenant (Silver / Gold / Platinum).
+model MembershipPlan {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  /// Tier code, unique per tenant: SILVER / GOLD / PLATINUM.
+  tier               String
+  name               String
+  monthlyFeeCents    Int
+  /// Flat service discount as a fraction 0..1 (e.g. 0.10 = 10% off services).
+  serviceDiscountPct Float    @default(0)
+  /// Loyalty points multiplier (e.g. 2 = double points).
+  pointsMultiplier   Float    @default(1)
+  benefits           String[] @default([])
+  active             Boolean  @default(true)
+  stripePriceId      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+
+  @@unique([tenantId, tier])
+  @@index([tenantId])
+  @@map("membership_plan")
+}
+
+/// A customer's active subscription to a plan.
+model Membership {
+  id                   String           @id @default(cuid())
+  tenantId             String
+  customerId           String
+  planId               String
+  status               MembershipStatus @default(ACTIVE)
+  startedAt            DateTime         @default(now())
+  currentPeriodEnd     DateTime?
+  stripeSubscriptionId String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  plan     MembershipPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@map("membership")
+}
+
+/// Append-only loyalty points ledger (positive = earned, negative = redeemed).
+model LoyaltyTransaction {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String
+  points     Int
+  /// VISIT / SPEND / REFERRAL / REBOOK / REDEEM / ADJUST.
+  reason     String
+  bookingId  String?
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@map("loyalty_transaction")
 }

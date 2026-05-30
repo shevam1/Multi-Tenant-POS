@@ -19,6 +19,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { VaccinationsModule } from './vaccinations/vaccinations.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { FormsModule } from './forms/forms.module';
+import { MembershipsModule } from './memberships/memberships.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { FormsModule } from './forms/forms.module';
     VaccinationsModule,
     SchedulingModule,
     FormsModule,
+    MembershipsModule,
   ],
   controllers: [HealthController],
   providers: [

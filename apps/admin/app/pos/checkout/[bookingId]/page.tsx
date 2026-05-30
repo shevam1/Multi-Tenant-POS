@@ -7,10 +7,18 @@ import { apiFetch, getToken } from '@/lib/api';
 interface BookingInfo {
   id: string;
   status: string;
-  customer: { fullName: string; statementCreditCents: number };
+  customer: { id: string; fullName: string; statementCreditCents: number };
   pet: { name: string } | null;
   store: { province: string; name: string };
   lineItems: { description: string; unitPriceCents: number }[];
+}
+
+interface MemberInfo {
+  tier: string;
+  planName: string;
+  discountCents: number;
+  pointsMultiplier: number;
+  benefits: string[];
 }
 
 interface CheckoutPreview {
@@ -37,11 +45,28 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [done, setDone] = useState(false);
+  const [member, setMember] = useState<MemberInfo | null>(null);
+  const [earned, setEarned] = useState<number | null>(null);
 
   useEffect(() => {
     if (!getToken()) { router.push('/login'); return; }
     apiFetch<BookingInfo & { store: { province: string } }>(`/bookings/${bookingId}`)
-      .then(setBooking).finally(() => setLoading(false));
+      .then(async b => {
+        setBooking(b);
+        const serviceSubtotal = b.lineItems.reduce((s, l) => s + l.unitPriceCents, 0);
+        const m = await apiFetch<{ plan: MemberInfo } | null>(`/memberships/customer/${b.customer.id}`).catch(() => null);
+        if (m && (m as unknown as { plan?: { tier: string; name: string; serviceDiscountPct: number; pointsMultiplier: number; benefits: string[] } }).plan) {
+          const plan = (m as unknown as { plan: { tier: string; name: string; serviceDiscountPct: number; pointsMultiplier: number; benefits: string[] } }).plan;
+          setMember({
+            tier: plan.tier,
+            planName: plan.name,
+            discountCents: Math.round(serviceSubtotal * plan.serviceDiscountPct),
+            pointsMultiplier: plan.pointsMultiplier,
+            benefits: plan.benefits,
+          });
+        }
+      })
+      .finally(() => setLoading(false));
   }, [bookingId, router]);
 
   useEffect(() => {
@@ -60,10 +85,11 @@ export default function CheckoutPage() {
     setPaying(true);
     try {
       const lines = booking.lineItems.map(l => ({ description: l.description, amountCents: l.unitPriceCents }));
-      await apiFetch(`/pos/bookings/${bookingId}/checkout`, {
+      const res = await apiFetch<{ loyalty?: { earned: number } }>(`/pos/bookings/${bookingId}/checkout`, {
         method: 'POST',
         body: JSON.stringify({ lines, tender, discountCents: useCredit ? booking.customer.statementCreditCents : 0, tipCents }),
       });
+      setEarned(res.loyalty?.earned ?? null);
       setDone(true);
     } catch(e) {
       alert(e instanceof Error ? e.message : 'Checkout failed');
@@ -80,6 +106,11 @@ export default function CheckoutPage() {
       <div className="text-4xl">✅</div>
       <h1 className="text-2xl font-bold">Payment complete</h1>
       <p className="text-neutral-500">Invoice created · Booking marked COMPLETED</p>
+      {earned !== null && earned > 0 && (
+        <p className="rounded-full bg-brand/10 px-4 py-1.5 text-sm font-medium text-brand">
+          +{earned} loyalty points earned 🎉
+        </p>
+      )}
       <button onClick={() => router.push('/dashboard')} className="mt-4 rounded-md bg-brand px-6 py-2 text-sm font-medium text-white">
         Back to dashboard
       </button>
@@ -96,6 +127,22 @@ export default function CheckoutPage() {
         <span className="text-sm text-neutral-400">{booking.store.name}</span>
       </header>
       <main className="mx-auto max-w-2xl px-6 py-8 space-y-6">
+        {/* Member banner */}
+        {member && (
+          <div className="rounded-xl border-2 border-violet-200 bg-gradient-to-r from-violet-50 to-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="rounded-full bg-violet-200 px-2.5 py-0.5 text-xs font-bold text-violet-800">{member.tier} MEMBER</span>
+                <p className="mt-1 text-sm font-medium">{member.planName}</p>
+              </div>
+              <div className="text-right text-sm">
+                {member.discountCents > 0 && <p className="font-semibold text-green-600">−{fmt(member.discountCents)} member discount</p>}
+                <p className="text-violet-600">earns {member.pointsMultiplier}× points</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Customer + services */}
         <div className="rounded-xl border bg-white p-5 shadow-sm">
           <p className="font-semibold">{booking.customer.fullName} {booking.pet && `· ${booking.pet.name}`}</p>
