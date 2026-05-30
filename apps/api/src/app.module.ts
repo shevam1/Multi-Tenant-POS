@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ClsModule } from 'nestjs-cls';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
@@ -15,11 +16,13 @@ import { PosModule } from './pos/pos.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { TenantsModule } from './tenants/tenants.module';
+import { VaccinationsModule } from './vaccinations/vaccinations.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuditModule,
     RealtimeModule,
@@ -29,6 +32,7 @@ import { TenantsModule } from './tenants/tenants.module';
     BookingsModule,
     PosModule,
     TenantsModule,
+    VaccinationsModule,
   ],
   controllers: [HealthController],
   providers: [

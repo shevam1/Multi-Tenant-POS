@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { CustomersService } from '../customers/customers.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { VaccinationsService } from '../vaccinations/vaccinations.service';
 import type { CreateBookingDto } from './dto/create-booking.dto';
 import type { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 
@@ -32,6 +33,7 @@ export class BookingsService {
     private readonly customers: CustomersService,
     private readonly audit: AuditService,
     private readonly realtime: RealtimeGateway,
+    private readonly vaccinations: VaccinationsService,
   ) {}
 
   async listForStore(storeId: string, date?: string) {
@@ -75,6 +77,21 @@ export class BookingsService {
     const reliability = await this.customers.reliabilitySummary(dto.customerId);
     const requiresDeposit = reliability.noShow >= NO_SHOW_DEPOSIT_THRESHOLD;
 
+    // Spec §3: check for expired vaccinations when a pet is attached.
+    // If the store has blocking enabled, throw; otherwise surface a warning.
+    let vaccinationWarning: string | undefined;
+    if (dto.petId) {
+      const hasExpired = await this.vaccinations.hasExpiredVaccinations(dto.petId);
+      if (hasExpired) {
+        if (dto.blockIfExpiredVaccinations) {
+          throw new BadRequestException(
+            'Booking blocked: this pet has expired vaccinations. Please renew before booking.',
+          );
+        }
+        vaccinationWarning = 'This pet has one or more expired vaccinations. Please renew before the appointment.';
+      }
+    }
+
     const booking = await this.prisma.db.booking.create({
       data: {
         tenantId,
@@ -102,10 +119,9 @@ export class BookingsService {
       include: { customer: true, pet: true, lineItems: true },
     });
 
-    await this.audit.log({ action: 'BOOKING_CREATE', entityType: 'booking', entityId: booking.id, metadata: { requiresDeposit, reliability } });
-    // Notify admin in real time: new pending booking from the web
+    await this.audit.log({ action: 'BOOKING_CREATE', entityType: 'booking', entityId: booking.id, metadata: { requiresDeposit, reliability, vaccinationWarning } });
     this.realtime.emitNewBooking(tenantId, booking);
-    return { ...booking, reliabilitySummary: reliability };
+    return { ...booking, reliabilitySummary: reliability, vaccinationWarning };
   }
 
   async updateStatus(id: string, dto: UpdateBookingStatusDto) {

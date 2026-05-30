@@ -104,6 +104,9 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-4">
           {user && <span className="text-sm text-neutral-600">{user.fullName} · {user.role.replace(/_/g,' ')}</span>}
+          <a href="/compliance" className="rounded-md bg-green-100 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200">
+            Vaccine report
+          </a>
           <a href="/groomer" className="rounded-md bg-purple-100 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-200">
             Groomer PWA
           </a>

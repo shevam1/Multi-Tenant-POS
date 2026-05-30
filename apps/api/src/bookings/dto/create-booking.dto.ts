@@ -11,4 +11,6 @@ export class CreateBookingDto {
   @IsOptional() @IsEnum(['WEB', 'POS', 'CALL_CENTER']) source?: BookingSource;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) lineItemIds?: string[];
+  /** If true, throw 400 when pet has expired vaccinations instead of just warning. */
+  @IsOptional() blockIfExpiredVaccinations?: boolean;
 }

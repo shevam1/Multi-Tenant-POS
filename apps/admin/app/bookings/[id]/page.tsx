@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { apiFetch, getToken } from '@/lib/api';
+import VaccinationTab from '@/components/vaccination-tab';
 
 interface BookingDetail {
   id: string;
@@ -10,7 +11,7 @@ interface BookingDetail {
   scheduledStart: string;
   notes: string | null;
   customer: { fullName: string; phone: string | null; email: string | null; tags: string[]; statementCreditCents: number };
-  pet: { name: string; breed: string | null; weightKg: number | null; tags: string[]; medicalNotes: string | null; groomNotes: string | null } | null;
+  pet: { id: string; name: string; breed: string | null; weightKg: number | null; tags: string[]; medicalNotes: string | null; groomNotes: string | null } | null;
   lineItems: { id: string; description: string; unitPriceCents: number }[];
   workflow: { stage: string; occurredAt: string }[];
   consents: { formType: string; signedAt: string | null }[];
@@ -123,6 +124,14 @@ export default function BookingDetailPage() {
               ))
             }
           </div>
+
+          {/* Vaccinations */}
+          {booking.pet && (
+            <div className="rounded-xl border bg-white p-5 shadow-sm">
+              <h2 className="mb-3 font-semibold">Vaccinations</h2>
+              <VaccinationTab petId={booking.pet.id} />
+            </div>
+          )}
         </div>
 
         {/* Right column */}
