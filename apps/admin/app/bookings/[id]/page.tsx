@@ -36,9 +36,25 @@ export default function BookingDetailPage() {
     apiFetch<BookingDetail>(`/bookings/${id}`).then(setBooking);
   }
 
-  async function approve() {
-    await apiFetch(`/bookings/${id}/approve`, { method: 'PATCH' });
-    apiFetch<BookingDetail>(`/bookings/${id}`).then(setBooking);
+  async function approve(override = false) {
+    try {
+      await apiFetch(`/bookings/${id}/approve`, { method: 'PATCH', body: JSON.stringify({ override }) });
+      apiFetch<BookingDetail>(`/bookings/${id}`).then(setBooking);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Approve failed';
+      if (msg.includes('consent forms not signed') && confirm(`${msg}\n\nOverride and confirm anyway?`)) {
+        approve(true);
+      } else {
+        alert(msg);
+      }
+    }
+  }
+
+  function copySigningLink() {
+    const webBase = (process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3001');
+    const link = `${webBase}/sign/${id}`;
+    navigator.clipboard.writeText(link);
+    alert(`Pre-visit signing link copied:\n${link}\n\nSend this to the client to sign on their own device.`);
   }
 
   if (loading) return <div className="p-8 text-sm text-neutral-500">Loading…</div>;
@@ -111,14 +127,20 @@ export default function BookingDetailPage() {
 
           {/* Consents */}
           <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-semibold">Consents</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold">Consents</h2>
+              <button onClick={copySigningLink}
+                className="rounded-md bg-brand/10 px-3 py-1.5 text-xs font-medium text-brand hover:bg-brand/20">
+                Copy signing link
+              </button>
+            </div>
             {booking.consents.length === 0
-              ? <p className="text-sm text-neutral-400">No consent forms submitted yet.</p>
+              ? <p className="text-sm text-neutral-400">No consent forms submitted yet. Send the signing link so the client can sign before arrival.</p>
               : booking.consents.map(c => (
                 <div key={c.formType} className="flex items-center justify-between py-2 border-b last:border-0 text-sm">
                   <span>{c.formType.replace(/_/g,' ')}</span>
                   <span className={c.signedAt ? 'text-green-600' : 'text-red-500'}>
-                    {c.signedAt ? `Signed ${new Date(c.signedAt).toLocaleDateString()}` : 'Not signed'}
+                    {c.signedAt ? `✓ Signed ${new Date(c.signedAt).toLocaleDateString()}` : 'Not signed'}
                   </span>
                 </div>
               ))
@@ -140,7 +162,7 @@ export default function BookingDetailPage() {
           <div className="rounded-xl border bg-white p-5 shadow-sm space-y-2">
             <h2 className="mb-3 font-semibold">Actions</h2>
             {booking.status === 'PENDING' && (
-              <button onClick={approve} className="w-full rounded-md bg-green-600 py-2 text-sm font-medium text-white hover:bg-green-700">
+              <button onClick={() => approve(false)} className="w-full rounded-md bg-green-600 py-2 text-sm font-medium text-white hover:bg-green-700">
                 Approve booking
               </button>
             )}

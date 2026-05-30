@@ -26,8 +26,8 @@ export class BookingsController {
 
   @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
   @Patch(':id/approve')
-  approve(@Param('id') id: string) {
-    return this.bookings.approve(id);
+  approve(@Param('id') id: string, @Body('override') override?: boolean) {
+    return this.bookings.approve(id, override ?? false);
   }
 
   @Patch(':id/status')

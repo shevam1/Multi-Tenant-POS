@@ -110,6 +110,9 @@ export default function DashboardPage() {
           <a href="/timeclock" className="rounded-md bg-teal-100 px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-200">
             Time Clock
           </a>
+          <a href="/forms" className="rounded-md bg-pink-100 px-3 py-1.5 text-xs font-medium text-pink-700 hover:bg-pink-200">
+            Forms
+          </a>
           <a href="/compliance" className="rounded-md bg-green-100 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200">
             Vaccine report
           </a>

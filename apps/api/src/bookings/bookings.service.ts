@@ -5,6 +5,7 @@ import { CustomersService } from '../customers/customers.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { VaccinationsService } from '../vaccinations/vaccinations.service';
+import { FormsService } from '../forms/forms.service';
 import type { CreateBookingDto } from './dto/create-booking.dto';
 import type { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 
@@ -34,6 +35,7 @@ export class BookingsService {
     private readonly audit: AuditService,
     private readonly realtime: RealtimeGateway,
     private readonly vaccinations: VaccinationsService,
+    private readonly forms: FormsService,
   ) {}
 
   async listForStore(storeId: string, date?: string) {
@@ -143,8 +145,24 @@ export class BookingsService {
     return updated;
   }
 
-  /** Approve a pending booking (manager/reception action). */
-  async approve(id: string) {
+  /**
+   * Approve a pending booking (manager/reception action).
+   * Spec §6: a booking cannot move PENDING → CONFIRMED until all mandatory
+   * consent forms are signed, unless a manager explicitly overrides.
+   */
+  async approve(id: string, override = false) {
+    const booking = await this.prisma.db.booking.findUnique({ where: { id } });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    if (!override) {
+      const unsigned = await this.forms.unsignedMandatoryForms(id, booking.tenantId);
+      if (unsigned.length > 0) {
+        throw new BadRequestException(
+          `Cannot confirm: mandatory consent forms not signed (${unsigned.join(', ')}). ` +
+          `Send the signing link or override.`,
+        );
+      }
+    }
     return this.updateStatus(id, { status: 'CONFIRMED' });
   }
 

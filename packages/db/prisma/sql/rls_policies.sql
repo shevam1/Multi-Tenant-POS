@@ -37,7 +37,11 @@ BEGIN
       ('invoice_line',           'tenantId'),
       ('invoice_tax_line',       'tenantId'),
       ('payment',                'tenantId'),
-      ('inventory_item',         'tenantId')
+      ('inventory_item',         'tenantId'),
+      ('shift_schedule',         'tenantId'),
+      ('timeclock_entry',        'tenantId'),
+      ('leave_request',          'tenantId'),
+      ('form_template',          'tenantId')
     ) AS v(table_name, tenant_col)
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t.table_name);

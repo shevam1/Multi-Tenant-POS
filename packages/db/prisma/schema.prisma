@@ -140,6 +140,7 @@ model Tenant {
   shifts           ShiftSchedule[]
   timeclockEntries TimeclockEntry[]
   leaveRequests    LeaveRequest[]
+  formTemplates    FormTemplate[]
 
   @@map("tenant")
 }
@@ -427,6 +428,30 @@ model WorkflowEvent {
   @@index([tenantId])
   @@index([bookingId, occurredAt])
   @@map("workflow_event")
+}
+
+/// Custom intake/consent form built by an admin (spec §6 drag-and-drop builder).
+/// These extend the module-defined default forms (GROOMING_CONSENT, etc.).
+model FormTemplate {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  /// Unique key within tenant, e.g. "CUSTOM_LIABILITY".
+  formType            String
+  title               String
+  mandatory           Boolean  @default(false)
+  /// Array of field defs: [{ key, label, type: text|checkbox|date|signature, required }]
+  fields              Json     @default("[]")
+  active              Boolean  @default(true)
+  /// Auto-dispatch this many hours before the appointment (null = manual only).
+  dispatchHoursBefore Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, formType])
+  @@index([tenantId])
+  @@map("form_template")
 }
 
 /// Signed consent / intake form attached to a booking.
