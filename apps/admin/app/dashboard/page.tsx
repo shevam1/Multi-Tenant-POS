@@ -104,6 +104,12 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-4">
           {user && <span className="text-sm text-neutral-600">{user.fullName} · {user.role.replace(/_/g,' ')}</span>}
+          <a href="/scheduling" className="rounded-md bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200">
+            Schedule
+          </a>
+          <a href="/timeclock" className="rounded-md bg-teal-100 px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-200">
+            Time Clock
+          </a>
           <a href="/compliance" className="rounded-md bg-green-100 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200">
             Vaccine report
           </a>

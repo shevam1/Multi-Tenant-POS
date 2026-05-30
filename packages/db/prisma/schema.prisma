@@ -127,16 +127,19 @@ model Tenant {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  stores       Store[]
-  users        User[]
-  customers    Customer[]
-  pets         Pet[]
-  catalogItems CatalogItem[]
-  pricingRules PricingRule[]
-  bookings     Booking[]
-  invoices     Invoice[]
-  inventory    InventoryItem[]
-  auditLogs    AuditLog[]
+  stores           Store[]
+  users            User[]
+  customers        Customer[]
+  pets             Pet[]
+  catalogItems     CatalogItem[]
+  pricingRules     PricingRule[]
+  bookings         Booking[]
+  invoices         Invoice[]
+  inventory        InventoryItem[]
+  auditLogs        AuditLog[]
+  shifts           ShiftSchedule[]
+  timeclockEntries TimeclockEntry[]
+  leaveRequests    LeaveRequest[]
 
   @@map("tenant")
 }
@@ -154,11 +157,14 @@ model Store {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users     User[]
-  bookings  Booking[]
-  invoices  Invoice[]
-  inventory InventoryItem[]
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users            User[]
+  bookings         Booking[]
+  invoices         Invoice[]
+  inventory        InventoryItem[]
+  shifts           ShiftSchedule[]
+  timeclockEntries TimeclockEntry[]
+  leaveRequests    LeaveRequest[]
 
   @@index([tenantId])
   @@map("store")
@@ -177,8 +183,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store  Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store          Store?           @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  shifts         ShiftSchedule[]
+  timeclockEntries TimeclockEntry[]
+  leaveRequests  LeaveRequest[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -543,4 +552,89 @@ model InventoryItem {
 
   @@index([tenantId, storeId])
   @@map("inventory_item")
+}
+
+// ── Staff scheduling (spec §12) ──────────────────────────────────────────────
+
+enum ShiftStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+/// A single scheduled shift for one staff member.
+model ShiftSchedule {
+  id          String      @id @default(cuid())
+  tenantId    String
+  storeId     String
+  userId      String
+  startsAt    DateTime
+  endsAt      DateTime
+  role        String?     /// e.g. "Groomer", "Reception" — for display only
+  status      ShiftStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, storeId])
+  @@index([userId])
+  @@map("shift_schedule")
+}
+
+/// Staff clock-in / clock-out log (spec §12 "secure in-app time clock").
+/// `clockOut` is null while the employee is still clocked in.
+model TimeclockEntry {
+  id          String    @id @default(cuid())
+  tenantId    String
+  storeId     String
+  userId      String
+  clockIn     DateTime
+  clockOut    DateTime?
+  /// Flag set by the system when clockOut is missing at end of day.
+  incomplete  Boolean   @default(false)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, storeId])
+  @@index([userId])
+  @@map("timeclock_entry")
+}
+
+/// Staff leave request.
+model LeaveRequest {
+  id          String      @id @default(cuid())
+  tenantId    String
+  storeId     String
+  userId      String
+  startsAt    DateTime
+  endsAt      DateTime
+  reason      String?
+  status      LeaveStatus @default(PENDING)
+  reviewedBy  String?     /// userId of the manager who approved/denied
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, storeId])
+  @@index([userId])
+  @@map("leave_request")
 }

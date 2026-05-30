@@ -17,6 +17,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { VaccinationsModule } from './vaccinations/vaccinations.module';
+import { SchedulingModule } from './scheduling/scheduling.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { VaccinationsModule } from './vaccinations/vaccinations.module';
     PosModule,
     TenantsModule,
     VaccinationsModule,
+    SchedulingModule,
   ],
   controllers: [HealthController],
   providers: [
