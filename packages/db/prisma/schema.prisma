@@ -216,6 +216,7 @@ model User {
   timeclockEntries TimeclockEntry[]
   leaveRequests  LeaveRequest[]
   customerNotes  CustomerNote[]
+  bookingGroomers BookingGroomer[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -464,11 +465,30 @@ model Booking {
   workflow  WorkflowEvent[]
   consents  ConsentSubmission[]
   invoice   Invoice?
+  groomers  BookingGroomer[]
 
   @@index([tenantId])
   @@index([tenantId, storeId, scheduledStart])
   @@index([tenantId, status])
   @@map("booking")
+}
+
+/// Additional groomers assigned to a booking (beyond the primary assignedGroomerId).
+/// Supports cases where a pet needs multiple hands.
+model BookingGroomer {
+  id        String  @id @default(cuid())
+  tenantId  String
+  bookingId String
+  userId    String
+  /// Optional note, e.g. "handles nails" / "second bather".
+  role      String?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, userId])
+  @@index([tenantId])
+  @@map("booking_groomer")
 }
 
 model BookingLineItem {

@@ -72,6 +72,7 @@ export class BookingsService {
         workflow: { orderBy: { occurredAt: 'asc' } },
         consents: true,
         invoice: { include: { lines: true, taxLines: true, payments: true } },
+        groomers: { include: { user: { select: { id: true, fullName: true } } } },
       },
     });
     if (!b) throw new NotFoundException('Booking not found');
@@ -342,6 +343,128 @@ export class BookingsService {
     const updated = await this.prisma.db.booking.update({ where: { id }, data: { status: 'PENDING' } });
     await this.audit.log({ action: 'BOOKING_UNCONFIRM', entityType: 'booking', entityId: id });
     return updated;
+  }
+
+  // ── Scheduling intelligence ──────────────────────────────────────────────
+
+  /** Default store operating window (used when no shifts are defined). */
+  private static readonly OPEN_H = 8;
+  private static readonly CLOSE_H = 19;
+  private static readonly SLOT_MIN = 60;
+
+  /**
+   * Available appointment slots for a store on a date.
+   * A slot is available if at least one groomer is free:
+   *   capacity(slot) = (# groomers on shift covering slot, or all groomers if no
+   *   shifts defined) − (# CONFIRMED/active bookings overlapping the slot).
+   * Only confirmed bookings consume capacity — pending web requests don't block.
+   */
+  async availability(storeId: string, date: string, tenantId?: string) {
+    const dayStart = new Date(date + 'T00:00:00');
+    const dayEnd = new Date(date + 'T23:59:59');
+    // Public (web) callers pass tenantId explicitly (no JWT/CLS); admin uses db getter.
+    const db = tenantId ? this.prisma.forTenant(tenantId) : this.prisma.db;
+
+    const [groomers, shifts, bookings] = await Promise.all([
+      db.user.findMany({ where: { storeId, role: 'GROOMER', active: true }, select: { id: true } }),
+      db.shiftSchedule.findMany({
+        where: { storeId, status: { not: 'CANCELLED' }, startsAt: { lt: dayEnd }, endsAt: { gt: dayStart } },
+        select: { userId: true, startsAt: true, endsAt: true },
+      }),
+      db.booking.findMany({
+        where: { storeId, status: { in: ['CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'] }, scheduledStart: { gte: dayStart, lte: dayEnd } },
+        select: { scheduledStart: true, scheduledEnd: true },
+      }),
+    ]);
+
+    const totalGroomers = Math.max(1, groomers.length);
+    const slots: { time: string; available: boolean; capacity: number }[] = [];
+
+    for (let h = BookingsService.OPEN_H; h < BookingsService.CLOSE_H; h++) {
+      const slotStart = new Date(date + 'T00:00:00');
+      slotStart.setHours(h, 0, 0, 0);
+      const slotEnd = new Date(slotStart.getTime() + BookingsService.SLOT_MIN * 60000);
+
+      // Groomers on shift covering this slot (fallback: all groomers if no shifts that day)
+      const onShift = shifts.length === 0
+        ? totalGroomers
+        : new Set(shifts.filter(s => s.startsAt < slotEnd && s.endsAt > slotStart).map(s => s.userId)).size;
+
+      // Bookings overlapping this slot
+      const booked = bookings.filter(b => {
+        const bEnd = b.scheduledEnd ?? new Date(b.scheduledStart.getTime() + 60 * 60000);
+        return b.scheduledStart < slotEnd && bEnd > slotStart;
+      }).length;
+
+      const capacity = Math.max(0, onShift - booked);
+      slots.push({ time: slotStart.toISOString(), available: capacity > 0, capacity });
+    }
+    return { date, slots };
+  }
+
+  /**
+   * Auto-schedule: assign the booking to the available groomer with the lightest
+   * workload that day (load-balancing), who is free during the booking's window.
+   */
+  async autoSchedule(id: string) {
+    const booking = await this.prisma.db.booking.findUnique({ where: { id } });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    const start = booking.scheduledStart;
+    const end = booking.scheduledEnd ?? new Date(start.getTime() + 60 * 60000);
+    const dayStart = new Date(start); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(start); dayEnd.setHours(23, 59, 59, 999);
+
+    const groomers = await this.prisma.db.user.findMany({
+      where: { storeId: booking.storeId, role: 'GROOMER', active: true }, select: { id: true, fullName: true },
+    });
+    if (groomers.length === 0) throw new BadRequestException('No groomers at this store');
+
+    // Day's bookings per groomer (for load balancing) + conflict check
+    const dayBookings = await this.prisma.db.booking.findMany({
+      where: { storeId: booking.storeId, id: { not: id }, status: { notIn: ['CANCELLED', 'NO_SHOW'] }, scheduledStart: { gte: dayStart, lte: dayEnd } },
+      select: { assignedGroomerId: true, scheduledStart: true, scheduledEnd: true },
+    });
+
+    const loadByGroomer = new Map<string, number>();
+    for (const g of groomers) loadByGroomer.set(g.id, 0);
+    const busyAtSlot = new Set<string>();
+    for (const b of dayBookings) {
+      if (!b.assignedGroomerId) continue;
+      const bEnd = b.scheduledEnd ?? new Date(b.scheduledStart.getTime() + 60 * 60000);
+      const mins = (bEnd.getTime() - b.scheduledStart.getTime()) / 60000;
+      loadByGroomer.set(b.assignedGroomerId, (loadByGroomer.get(b.assignedGroomerId) ?? 0) + mins);
+      if (b.scheduledStart < end && bEnd > start) busyAtSlot.add(b.assignedGroomerId);
+    }
+
+    // Candidates: free during the window, sorted by least load
+    const candidates = groomers
+      .filter(g => !busyAtSlot.has(g.id))
+      .sort((a, b) => (loadByGroomer.get(a.id) ?? 0) - (loadByGroomer.get(b.id) ?? 0));
+
+    if (candidates.length === 0) throw new BadRequestException('No groomer is free in this time slot');
+
+    const chosen = candidates[0];
+    await this.prisma.db.booking.update({ where: { id }, data: { assignedGroomerId: chosen.id } });
+    await this.audit.log({ action: 'BOOKING_AUTO_SCHEDULE', entityType: 'booking', entityId: id, metadata: { groomerId: chosen.id } });
+    this.realtime.emitBookingStatusChange(booking.storeId, { bookingId: id, assignedGroomerId: chosen.id });
+    return { assignedGroomerId: chosen.id, groomerName: chosen.fullName, loadMinutes: loadByGroomer.get(chosen.id) ?? 0 };
+  }
+
+  // ── Multi-groomer ──────────────────────────────────────────────────────────
+
+  async addGroomer(bookingId: string, userId: string, role: string | undefined, tenantId: string) {
+    const existing = await this.prisma.db.bookingGroomer.findFirst({ where: { bookingId, userId } });
+    if (existing) return existing;
+    const bg = await this.prisma.db.bookingGroomer.create({ data: { tenantId, bookingId, userId, role } });
+    await this.audit.log({ action: 'BOOKING_ADD_GROOMER', entityType: 'booking', entityId: bookingId, metadata: { userId } });
+    return bg;
+  }
+
+  async removeGroomer(bookingId: string, userId: string) {
+    await this.prisma.db.bookingGroomer.deleteMany({ where: { bookingId, userId } });
+    await this.audit.log({ action: 'BOOKING_REMOVE_GROOMER', entityType: 'booking', entityId: bookingId, metadata: { userId } });
+    return { removed: true };
   }
 
   /** Appointment audit trail — combines audit log + workflow events. */

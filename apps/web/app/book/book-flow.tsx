@@ -47,6 +47,8 @@ export default function BookFlow() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [slotDate, setSlotDate] = useState('');
+  const [slots, setSlots] = useState<{ time: string; available: boolean }[]>([]);
 
   useEffect(() => {
     apiFetch<Tenant>(`/public/tenant/${slug}`).then(async t => {
@@ -64,6 +66,14 @@ export default function BookFlow() {
     if (!form.storeId) return;
     apiFetch<CatalogItem[]>(`/public/tenant/${slug}/catalog?storeId=${form.storeId}`).then(setCatalog).catch(() => {});
   }, [form.storeId, slug]);
+
+  // Fetch available slots when date or store changes (only open slots shown)
+  useEffect(() => {
+    if (!slotDate || !form.storeId) { setSlots([]); return; }
+    apiFetch<{ slots: { time: string; available: boolean }[] }>(
+      `/public/tenant/${slug}/availability?storeId=${form.storeId}&date=${slotDate}`,
+    ).then(r => setSlots(r.slots)).catch(() => setSlots([]));
+  }, [slotDate, form.storeId, slug]);
 
   async function submit() {
     setSubmitting(true);
@@ -223,10 +233,36 @@ export default function BookFlow() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium mb-1">Date &amp; time *</label>
-              <input type="datetime-local" className="w-full rounded-lg border px-3 py-2.5 text-sm"
-                value={form.scheduledStart}
-                onChange={e => setForm(f => ({ ...f, scheduledStart: e.target.value }))} />
+              <label className="block text-sm font-medium mb-1">Date *</label>
+              <input type="date" className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                value={slotDate}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={e => { setSlotDate(e.target.value); setForm(f => ({ ...f, scheduledStart: '' })); }} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Available times *</label>
+              {!slotDate ? (
+                <p className="text-sm text-neutral-400">Pick a date to see open slots.</p>
+              ) : slots.length === 0 ? (
+                <p className="text-sm text-neutral-400">Loading availability…</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-2">
+                  {slots.map(s => {
+                    const t = new Date(s.time);
+                    const label = t.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
+                    const selected = form.scheduledStart === s.time;
+                    return (
+                      <button key={s.time} type="button" disabled={!s.available}
+                        onClick={() => setForm(f => ({ ...f, scheduledStart: s.time }))}
+                        style={selected ? { backgroundColor: brand, color: '#fff', borderColor: brand } : {}}
+                        className={`rounded-lg border py-2 text-xs font-medium transition ${s.available ? 'hover:border-neutral-400' : 'opacity-30 cursor-not-allowed line-through'}`}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="mt-1 text-xs text-neutral-400">Only open slots are shown — confirmed appointments are hidden.</p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Notes (optional)</label>

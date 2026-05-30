@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { BookingsService } from './bookings.service';
@@ -42,6 +42,32 @@ export class BookingsController {
   @Patch(':id/confirm')
   setConfirmed(@Param('id') id: string, @Body('confirmed') confirmed: boolean, @Body('override') override?: boolean) {
     return this.bookings.setConfirmed(id, confirmed, override ?? false);
+  }
+
+  // ── Scheduling intelligence ───────────────────────────────────────────────
+
+  @Get('availability')
+  availability(@Query('storeId') storeId: string, @Query('date') date: string) {
+    return this.bookings.availability(storeId, date);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Post(':id/auto-schedule')
+  autoSchedule(@Param('id') id: string) {
+    return this.bookings.autoSchedule(id);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Post(':id/groomers')
+  addGroomer(@Param('id') id: string, @Body('userId') userId: string, @Body('role') role: string, @CurrentUser() user: AuthUser) {
+    return this.bookings.addGroomer(id, userId, role, user.tenantId);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Delete(':id/groomers/:userId')
+  @HttpCode(204)
+  removeGroomer(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.bookings.removeGroomer(id, userId);
   }
 
   @Get(':id')

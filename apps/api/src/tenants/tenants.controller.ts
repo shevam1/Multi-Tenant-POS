@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Public } from '../auth/decorators';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { CatalogService } from '../catalog/catalog.service';
+import { BookingsService } from '../bookings/bookings.service';
 import type { BookingSource } from '@omnipos/db';
 
 @Controller('public')
@@ -11,6 +12,7 @@ export class TenantsController {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
     private readonly catalog: CatalogService,
+    private readonly bookings: BookingsService,
   ) {}
 
   @Public()
@@ -41,6 +43,14 @@ export class TenantsController {
       const items = await tx.catalogItem.findMany({ where: { active: true }, orderBy: { kind: 'asc' } });
       return items.map(i => ({ id: i.id, kind: i.kind, name: i.name, description: i.description, durationMin: i.durationMin, priceCents: i.basePriceCents, available: true }));
     }, { timeout: 30000 });
+  }
+
+  @Public()
+  @Get('tenant/:slug/availability')
+  async getAvailability(@Param('slug') slug: string, @Query('storeId') storeId: string, @Query('date') date: string) {
+    const tenant = await this.prisma.asSystem(tx => tx.tenant.findUnique({ where: { slug } }));
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    return this.bookings.availability(storeId, date, tenant.id);
   }
 
   @Public()

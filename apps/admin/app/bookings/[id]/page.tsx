@@ -5,10 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import { apiFetch, getToken } from '@/lib/api';
 import VaccinationTab from '@/components/vaccination-tab';
 
+interface BookingGroomer { userId: string; role: string | null; user: { id: string; fullName: string } }
 interface BookingDetail {
   id: string;
   status: string;
   scheduledStart: string;
+  storeId: string;
+  assignedGroomerId: string | null;
   notes: string | null;
   customer: { fullName: string; phone: string | null; email: string | null; tags: string[]; statementCreditCents: number };
   pet: { id: string; name: string; breed: string | null; weightKg: number | null; tags: string[]; medicalNotes: string | null; groomNotes: string | null } | null;
@@ -16,7 +19,10 @@ interface BookingDetail {
   workflow: { stage: string; occurredAt: string }[];
   consents: { formType: string; signedAt: string | null }[];
   invoice: { status: string; totalCents: number; subtotalCents: number; discountCents: number; tipCents: number; cashRoundingCents: number; taxLines: { component: string; rate: number; amountCents: number }[] } | null;
+  groomers: BookingGroomer[];
 }
+
+interface Staff { id: string; fullName: string; role: string }
 
 const WORKFLOW_STAGES = ['CHECK_IN','BEFORE_PHOTOS','BATH','DRYING','STYLING','NAILS','QUALITY_CHECK','AFTER_PHOTOS','READY'];
 
@@ -24,12 +30,37 @@ export default function BookingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [booking, setBooking] = useState<BookingDetail | null>(null);
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!getToken()) { router.push('/login'); return; }
-    apiFetch<BookingDetail>(`/bookings/${id}`).then(setBooking).finally(() => setLoading(false));
+    apiFetch<BookingDetail>(`/bookings/${id}`).then(b => {
+      setBooking(b);
+      if (b.storeId) apiFetch<Staff[]>(`/scheduling/staff?storeId=${b.storeId}`).then(s => setStaff(s.filter(u => u.role === 'GROOMER' || u.role === 'STORE_MANAGER'))).catch(() => {});
+    }).finally(() => setLoading(false));
   }, [id, router]);
+
+  async function autoSchedule() {
+    try {
+      const res = await apiFetch<{ groomerName: string }>(`/bookings/${id}/auto-schedule`, { method: 'POST' });
+      alert(`Auto-assigned to ${res.groomerName} (lightest workload).`);
+      reload();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Auto-schedule failed'); }
+  }
+  async function assignPrimary(userId: string) {
+    await apiFetch(`/bookings/${id}/reschedule`, { method: 'PATCH', body: JSON.stringify({ assignedGroomerId: userId || null }) });
+    reload();
+  }
+  async function addGroomer(userId: string) {
+    if (!userId) return;
+    await apiFetch(`/bookings/${id}/groomers`, { method: 'POST', body: JSON.stringify({ userId }) });
+    reload();
+  }
+  async function removeGroomer(userId: string) {
+    await apiFetch(`/bookings/${id}/groomers/${userId}`, { method: 'DELETE' });
+    reload();
+  }
 
   async function advanceStage(stage: string) {
     await apiFetch(`/bookings/${id}/workflow`, { method: 'POST', body: JSON.stringify({ stage }) });
@@ -190,6 +221,39 @@ export default function BookingDetailPage() {
 
         {/* Right column */}
         <div className="space-y-4">
+          {/* Groomers */}
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold">Groomers</h2>
+              <button onClick={autoSchedule} className="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-200">
+                ⚡ Auto-schedule
+              </button>
+            </div>
+            <label className="block text-xs text-neutral-500 mb-1">Primary groomer</label>
+            <select className="w-full rounded-lg border px-3 py-2 text-sm bg-white mb-3"
+              value={booking.assignedGroomerId ?? ''} onChange={e => assignPrimary(e.target.value)}>
+              <option value="">Unassigned</option>
+              {staff.map(s => <option key={s.id} value={s.id}>{s.fullName}</option>)}
+            </select>
+
+            {/* Additional groomers (multi-hand) */}
+            <label className="block text-xs text-neutral-500 mb-1">Additional groomers</label>
+            <div className="space-y-1 mb-2">
+              {booking.groomers.map(g => (
+                <div key={g.userId} className="flex items-center justify-between rounded bg-neutral-50 px-2 py-1 text-sm">
+                  <span>{g.user.fullName}</span>
+                  <button onClick={() => removeGroomer(g.userId)} className="text-xs text-red-400 hover:text-red-600">✕</button>
+                </div>
+              ))}
+              {booking.groomers.length === 0 && <p className="text-xs text-neutral-300">None</p>}
+            </div>
+            <select className="w-full rounded-lg border px-3 py-1.5 text-sm bg-white" value="" onChange={e => addGroomer(e.target.value)}>
+              <option value="">+ Add groomer…</option>
+              {staff.filter(s => s.id !== booking.assignedGroomerId && !booking.groomers.some(g => g.userId === s.id))
+                .map(s => <option key={s.id} value={s.id}>{s.fullName}</option>)}
+            </select>
+          </div>
+
           {/* Actions */}
           <div className="rounded-xl border bg-white p-5 shadow-sm space-y-2">
             <h2 className="mb-3 font-semibold">Actions</h2>
