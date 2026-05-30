@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, getToken } from '@/lib/api';
 
+interface BookingPhoto { id: string; kind: string; url: string; createdAt: string }
 interface GroomerBooking {
   id: string;
   status: string;
@@ -13,6 +14,7 @@ interface GroomerBooking {
   pet: { name: string; breed: string | null; weightKg: number | null; tags: string[]; medicalNotes: string | null; groomNotes: string | null; photoUrl: string | null } | null;
   lineItems: { description: string }[];
   workflow: { stage: string; occurredAt: string }[];
+  photos?: BookingPhoto[];
 }
 
 const STAGES = ['CHECK_IN','BEFORE_PHOTOS','BATH','DRYING','STYLING','NAILS','QUALITY_CHECK','AFTER_PHOTOS','READY'];
@@ -58,6 +60,21 @@ export default function GroomerPage() {
     const updated = await apiFetch<GroomerBooking>(`/bookings/${active.id}`);
     setActive(updated);
     setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
+  }
+
+  async function uploadPhoto(kind: 'BEFORE' | 'AFTER', file: File) {
+    if (!active) return;
+    if (file.size > 2_000_000) { alert('Image too large (max 2 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      await apiFetch(`/bookings/${active.id}/photos`, {
+        method: 'POST',
+        body: JSON.stringify({ kind, url: reader.result as string }),
+      });
+      const updated = await apiFetch<GroomerBooking>(`/bookings/${active.id}`);
+      setActive(updated);
+    };
+    reader.readAsDataURL(file);
   }
 
   if (loading) return <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">Loading…</div>;
@@ -175,6 +192,32 @@ export default function GroomerPage() {
         {nextIdx < 0 && (
           <p className="mt-3 text-sm text-center text-green-400 font-semibold">✓ All stages complete — Ready for pickup</p>
         )}
+      </div>
+
+      {/* Before / After photos */}
+      <div className="rounded-xl bg-neutral-800 p-4 mb-4">
+        <p className="text-xs font-semibold text-neutral-400 uppercase mb-3">Before / After photos</p>
+        <div className="grid grid-cols-2 gap-3">
+          {(['BEFORE', 'AFTER'] as const).map(kind => {
+            const photos = (active.photos ?? []).filter(p => p.kind === kind);
+            return (
+              <div key={kind}>
+                <p className="text-xs text-neutral-400 mb-1">{kind}</p>
+                <div className="space-y-2">
+                  {photos.map(p => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={p.id} src={p.url} alt={kind} className="w-full rounded-lg object-cover" />
+                  ))}
+                  <label className="flex h-20 items-center justify-center rounded-lg border-2 border-dashed border-neutral-600 text-sm text-neutral-400 cursor-pointer hover:border-brand">
+                    + Add {kind.toLowerCase()}
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(kind, f); }} />
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Timeline */}

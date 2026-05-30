@@ -61,6 +61,8 @@ export class TenantsController {
       storeId: string;
       customer: { fullName: string; phone?: string; email?: string };
       pet?: { name: string; species?: string; breed?: string; weightKg?: number };
+      /** Multi-pet bookings: each pet with its own selected packages. */
+      pets?: { name: string; species?: string; breed?: string; weightKg?: number; catalogItemIds?: string[] }[];
       scheduledStart: string;
       catalogItemIds?: string[];
       notes?: string;
@@ -96,49 +98,55 @@ export class TenantsController {
         customerId = cust.id;
       }
 
-      // Create pet if provided
-      let petId: string | undefined;
-      if (body.pet) {
-        const pet = await tx.pet.create({
-          data: {
-            tenantId: tenant.id,
-            customerId,
-            name: body.pet.name,
-            species: body.pet.species ?? 'DOG',
-            breed: body.pet.breed,
-            weightKg: body.pet.weightKg,
-          },
-        });
-        petId = pet.id;
-      }
+      // Normalise to a pets[] array (supports both single `pet` and multi `pets`).
+      const petInputs = body.pets?.length
+        ? body.pets
+        : body.pet
+          ? [{ ...body.pet, catalogItemIds: body.catalogItemIds }]
+          : [];
 
-      // Resolve line items from catalog, applying per-location price overrides.
+      // Pre-load catalog (with location overrides) for price resolution.
+      const allItemIds = [...new Set(petInputs.flatMap(p => p.catalogItemIds ?? []).concat(body.catalogItemIds ?? []))];
+      const catalogItems = allItemIds.length
+        ? await tx.catalogItem.findMany({ where: { id: { in: allItemIds } }, include: { storeOverrides: { where: { storeId: body.storeId } } } })
+        : [];
+      const priceOf = (id: string) => {
+        const it = catalogItems.find(c => c.id === id);
+        return it ? { name: it.name, price: it.storeOverrides[0]?.priceCents ?? it.basePriceCents } : null;
+      };
+
+      // Create pets
+      const createdPetIds: string[] = [];
       const lineItems: { tenantId: string; catalogItemId: string; description: string; quantity: number; unitPriceCents: number }[] = [];
-      if (body.catalogItemIds?.length) {
-        const items = await tx.catalogItem.findMany({
-          where: { id: { in: body.catalogItemIds } },
-          include: { storeOverrides: { where: { storeId: body.storeId } } },
+      for (const p of petInputs) {
+        const pet = await tx.pet.create({
+          data: { tenantId: tenant.id, customerId, name: p.name, species: p.species ?? 'DOG', breed: p.breed, weightKg: p.weightKg },
         });
-        for (const item of items) {
-          const priceCents = item.storeOverrides[0]?.priceCents ?? item.basePriceCents;
-          lineItems.push({ tenantId: tenant.id, catalogItemId: item.id, description: item.name, quantity: 1, unitPriceCents: priceCents });
+        createdPetIds.push(pet.id);
+        for (const cid of p.catalogItemIds ?? []) {
+          const resolved = priceOf(cid);
+          if (resolved) lineItems.push({ tenantId: tenant.id, catalogItemId: cid, description: `${resolved.name} — ${p.name}`, quantity: 1, unitPriceCents: resolved.price });
         }
       }
+
+      const primaryPetId = createdPetIds[0];
+      const extraPetIds = createdPetIds.slice(1);
 
       return tx.booking.create({
         data: {
           tenantId: tenant.id,
           storeId: body.storeId,
           customerId,
-          petId,
+          petId: primaryPetId,
           status: 'PENDING',
           source: 'WEB' as BookingSource,
           scheduledStart: new Date(body.scheduledStart),
           notes: body.notes,
           cardOnFile: body.cardOnFile ?? false,
           lineItems: lineItems.length ? { create: lineItems } : undefined,
+          extraPets: extraPetIds.length ? { create: extraPetIds.map(pid => ({ tenantId: tenant.id, petId: pid })) } : undefined,
         },
-        include: { customer: true, pet: true, lineItems: true },
+        include: { customer: true, pet: true, lineItems: true, extraPets: { include: { pet: true } } },
       });
     }, { timeout: 30000 });
 

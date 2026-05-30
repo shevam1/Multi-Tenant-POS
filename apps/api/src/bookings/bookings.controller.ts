@@ -70,6 +70,45 @@ export class BookingsController {
     return this.bookings.removeGroomer(id, userId);
   }
 
+  // ── Multi-pet ─────────────────────────────────────────────────────────────
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Post(':id/pets')
+  addPet(@Param('id') id: string, @Body('petId') petId: string, @CurrentUser() user: AuthUser) {
+    return this.bookings.addPet(id, petId, user.tenantId);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Delete(':id/pets/:petId')
+  @HttpCode(204)
+  removePet(@Param('id') id: string, @Param('petId') petId: string) {
+    return this.bookings.removePet(id, petId);
+  }
+
+  // ── Before/after photos (groomer PWA) ──────────────────────────────────────
+
+  @Get(':id/photos')
+  listPhotos(@Param('id') id: string) {
+    return this.bookings.listPhotos(id);
+  }
+
+  @Post(':id/photos')
+  addPhoto(
+    @Param('id') id: string,
+    @Body('kind') kind: string,
+    @Body('url') url: string,
+    @Body('petId') petId: string | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.bookings.addPhoto(id, kind, url, petId, user.userId, user.tenantId);
+  }
+
+  @Delete(':id/photos/:photoId')
+  @HttpCode(204)
+  deletePhoto(@Param('photoId') photoId: string) {
+    return this.bookings.deletePhoto(photoId);
+  }
+
   @Get(':id')
   get(@Param('id') id: string) {
     return this.bookings.findOne(id);

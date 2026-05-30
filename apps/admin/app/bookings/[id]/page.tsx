@@ -20,6 +20,8 @@ interface BookingDetail {
   consents: { formType: string; signedAt: string | null }[];
   invoice: { status: string; totalCents: number; subtotalCents: number; discountCents: number; tipCents: number; cashRoundingCents: number; taxLines: { component: string; rate: number; amountCents: number }[] } | null;
   groomers: BookingGroomer[];
+  extraPets: { petId: string; pet: { id: string; name: string; breed: string | null } }[];
+  photos: { id: string; kind: string; url: string; createdAt: string }[];
 }
 
 interface Staff { id: string; fullName: string; role: string }
@@ -209,6 +211,43 @@ export default function BookingDetailPage() {
               ))
             }
           </div>
+
+          {/* Additional pets (multi-pet booking) */}
+          {booking.extraPets.length > 0 && (
+            <div className="rounded-xl border bg-white p-5 shadow-sm">
+              <h2 className="mb-2 font-semibold">Additional pets</h2>
+              <div className="flex flex-wrap gap-2">
+                {booking.extraPets.map(ep => (
+                  <span key={ep.petId} className="rounded-full bg-neutral-100 px-2.5 py-1 text-sm">
+                    {ep.pet.name}{ep.pet.breed ? ` (${ep.pet.breed})` : ''}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Before / After photos (from groomer PWA) */}
+          {booking.photos.length > 0 && (
+            <div className="rounded-xl border bg-white p-5 shadow-sm">
+              <h2 className="mb-3 font-semibold">Before / After photos</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {(['BEFORE', 'AFTER'] as const).map(kind => (
+                  <div key={kind}>
+                    <p className="text-xs font-semibold text-neutral-400 uppercase mb-1">{kind}</p>
+                    <div className="space-y-2">
+                      {booking.photos.filter(p => p.kind === kind).map(p => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={p.id} src={p.url} alt={kind} className="w-full rounded-lg border object-cover" />
+                      ))}
+                      {booking.photos.filter(p => p.kind === kind).length === 0 && (
+                        <p className="text-xs text-neutral-300">None</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Vaccinations */}
           {booking.pet && (

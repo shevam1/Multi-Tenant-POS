@@ -324,6 +324,7 @@ model Pet {
   customer       Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   vaccinations   VaccinationRecord[]
   bookings       Booking[]
+  bookingPets    BookingPet[]
 
   @@index([tenantId])
   @@index([customerId])
@@ -466,11 +467,48 @@ model Booking {
   consents  ConsentSubmission[]
   invoice   Invoice?
   groomers  BookingGroomer[]
+  extraPets BookingPet[]
+  photos    BookingPhoto[]
 
   @@index([tenantId])
   @@index([tenantId, storeId, scheduledStart])
   @@index([tenantId, status])
   @@map("booking")
+}
+
+/// Additional pets on a booking (beyond the primary petId) — multi-pet appointments.
+model BookingPet {
+  id        String  @id @default(cuid())
+  tenantId  String
+  bookingId String
+  petId     String
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  pet     Pet     @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, petId])
+  @@index([tenantId])
+  @@map("booking_pet")
+}
+
+/// Before/after photos captured by the groomer during the workflow.
+model BookingPhoto {
+  id         String   @id @default(cuid())
+  tenantId   String
+  bookingId  String
+  petId      String?
+  /// BEFORE or AFTER.
+  kind       String
+  /// Image data URL or storage URL.
+  url        String
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@map("booking_photo")
 }
 
 /// Additional groomers assigned to a booking (beyond the primary assignedGroomerId).

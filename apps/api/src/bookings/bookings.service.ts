@@ -73,6 +73,8 @@ export class BookingsService {
         consents: true,
         invoice: { include: { lines: true, taxLines: true, payments: true } },
         groomers: { include: { user: { select: { id: true, fullName: true } } } },
+        extraPets: { include: { pet: { select: { id: true, name: true, breed: true } } } },
+        photos: { orderBy: { createdAt: 'asc' } },
       },
     });
     if (!b) throw new NotFoundException('Booking not found');
@@ -465,6 +467,43 @@ export class BookingsService {
     await this.prisma.db.bookingGroomer.deleteMany({ where: { bookingId, userId } });
     await this.audit.log({ action: 'BOOKING_REMOVE_GROOMER', entityType: 'booking', entityId: bookingId, metadata: { userId } });
     return { removed: true };
+  }
+
+  // ── Multi-pet ────────────────────────────────────────────────────────────
+
+  async addPet(bookingId: string, petId: string, tenantId: string) {
+    const existing = await this.prisma.db.bookingPet.findFirst({ where: { bookingId, petId } });
+    if (existing) return existing;
+    const bp = await this.prisma.db.bookingPet.create({ data: { tenantId, bookingId, petId } });
+    await this.audit.log({ action: 'BOOKING_ADD_PET', entityType: 'booking', entityId: bookingId, metadata: { petId } });
+    return bp;
+  }
+
+  async removePet(bookingId: string, petId: string) {
+    await this.prisma.db.bookingPet.deleteMany({ where: { bookingId, petId } });
+    await this.audit.log({ action: 'BOOKING_REMOVE_PET', entityType: 'booking', entityId: bookingId, metadata: { petId } });
+    return { removed: true };
+  }
+
+  // ── Before/after photos ──────────────────────────────────────────────────
+
+  async addPhoto(bookingId: string, kind: string, url: string, petId: string | undefined, uploadedBy: string, tenantId: string) {
+    const photo = await this.prisma.db.bookingPhoto.create({
+      data: { tenantId, bookingId, kind, url, petId, uploadedBy },
+    });
+    await this.audit.log({ action: 'BOOKING_PHOTO', entityType: 'booking', entityId: bookingId, metadata: { kind } });
+    const booking = await this.prisma.db.booking.findUnique({ where: { id: bookingId }, select: { storeId: true } });
+    if (booking) this.realtime.emitQueueUpdate(booking.storeId, { bookingId, photoAdded: kind });
+    return photo;
+  }
+
+  async listPhotos(bookingId: string) {
+    return this.prisma.db.bookingPhoto.findMany({ where: { bookingId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async deletePhoto(photoId: string) {
+    await this.prisma.db.bookingPhoto.delete({ where: { id: photoId } });
+    return { deleted: true };
   }
 
   /** Appointment audit trail — combines audit log + workflow events. */

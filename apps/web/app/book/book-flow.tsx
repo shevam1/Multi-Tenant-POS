@@ -23,15 +23,20 @@ interface CatalogItem {
 
 type Step = 'returning' | 'new-customer' | 'pet' | 'service' | 'schedule' | 'confirm' | 'done';
 
+interface PetEntry {
+  name: string; breed: string; weight: string; selectedItems: string[];
+}
+
 interface BookingForm {
   isNew: boolean;
   fullName: string; phone: string; email: string;
-  petName: string; petBreed: string; petWeight: string;
-  selectedItems: string[];
+  pets: PetEntry[];
   scheduledStart: string;
   storeId: string;
   notes: string;
 }
+
+const emptyPet = (): PetEntry => ({ name: '', breed: '', weight: '', selectedItems: [] });
 
 export default function BookFlow() {
   const params = useSearchParams();
@@ -42,8 +47,7 @@ export default function BookFlow() {
   const [step, setStep] = useState<Step>('returning');
   const [form, setForm] = useState<BookingForm>({
     isNew: true, fullName: '', phone: '', email: '',
-    petName: '', petBreed: '', petWeight: '',
-    selectedItems: [], scheduledStart: '', storeId: '', notes: '',
+    pets: [emptyPet()], scheduledStart: '', storeId: '', notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -84,9 +88,12 @@ export default function BookFlow() {
         body: JSON.stringify({
           storeId: form.storeId,
           customer: { fullName: form.fullName, phone: form.phone || undefined, email: form.email || undefined },
-          pet: form.petName ? { name: form.petName, breed: form.petBreed || undefined, weightKg: form.petWeight ? Number(form.petWeight) : undefined } : undefined,
+          pets: form.pets.filter(p => p.name).map(p => ({
+            name: p.name, breed: p.breed || undefined,
+            weightKg: p.weight ? Number(p.weight) : undefined,
+            catalogItemIds: p.selectedItems,
+          })),
           scheduledStart: new Date(form.scheduledStart).toISOString(),
-          catalogItemIds: form.selectedItems,
           notes: form.notes || undefined,
           isNewCustomer: form.isNew,
         }),
@@ -158,58 +165,79 @@ export default function BookFlow() {
           </div>
         )}
 
-        {/* ── Pet info ── */}
+        {/* ── Pet info (multi-pet) ── */}
         {step === 'pet' && (
           <div className="space-y-5">
-            <h2 className="text-xl font-bold">Your pet</h2>
-            <div className="space-y-3">
-              {[
-                { label: 'Pet name *', key: 'petName', type: 'text', placeholder: 'Rex' },
-                { label: 'Breed', key: 'petBreed', type: 'text', placeholder: 'Golden Retriever' },
-                { label: 'Weight (kg)', key: 'petWeight', type: 'number', placeholder: '25' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-sm font-medium mb-1">{f.label}</label>
-                  <input type={f.type} placeholder={f.placeholder}
-                    className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
-                    value={form[f.key as keyof BookingForm] as string}
-                    onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
+            <h2 className="text-xl font-bold">Your pet{form.pets.length > 1 ? 's' : ''}</h2>
+            {form.pets.map((pet, i) => (
+              <div key={i} className="rounded-xl border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">Pet {i + 1}</p>
+                  {form.pets.length > 1 && (
+                    <button onClick={() => setForm(f => ({ ...f, pets: f.pets.filter((_, idx) => idx !== i) }))}
+                      className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                  )}
                 </div>
-              ))}
-            </div>
+                {[
+                  { label: 'Pet name *', key: 'name', type: 'text', placeholder: 'Rex' },
+                  { label: 'Breed', key: 'breed', type: 'text', placeholder: 'Golden Retriever' },
+                  { label: 'Weight (kg)', key: 'weight', type: 'number', placeholder: '25' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label className="block text-sm font-medium mb-1">{f.label}</label>
+                    <input type={f.type} placeholder={f.placeholder}
+                      className="w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
+                      value={pet[f.key as keyof PetEntry] as string}
+                      onChange={e => setForm(prev => ({ ...prev, pets: prev.pets.map((p, idx) => idx === i ? { ...p, [f.key]: e.target.value } : p) }))} />
+                  </div>
+                ))}
+              </div>
+            ))}
+            <button onClick={() => setForm(f => ({ ...f, pets: [...f.pets, emptyPet()] }))}
+              className="w-full rounded-xl border-2 border-dashed py-2.5 text-sm font-medium text-neutral-500 hover:border-neutral-400">
+              + Add another pet
+            </button>
             <div className="flex gap-3">
               <button onClick={() => setStep('new-customer')} className="flex-1 rounded-xl border py-3 text-sm font-medium">Back</button>
-              <button onClick={() => setStep('service')} disabled={!form.petName}
+              <button onClick={() => setStep('service')} disabled={!form.pets.some(p => p.name)}
                 style={{ backgroundColor: brand }}
                 className="flex-1 rounded-xl py-3 text-sm font-semibold text-white disabled:opacity-50">Continue</button>
             </div>
           </div>
         )}
 
-        {/* ── Service selection ── */}
+        {/* ── Service selection (per pet) ── */}
         {step === 'service' && (
-          <div className="space-y-5">
-            <h2 className="text-xl font-bold">Choose a service</h2>
-            <div className="space-y-3">
-              {packages.map(item => (
-                <label key={item.id}
-                  className={`flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition ${form.selectedItems.includes(item.id) ? 'bg-neutral-50' : 'hover:bg-neutral-50'}`}
-                  style={form.selectedItems.includes(item.id) ? { borderColor: brand } : {}}>
-                  <input type="checkbox" className="mt-0.5 h-4 w-4"
-                    checked={form.selectedItems.includes(item.id)}
-                    onChange={e => setForm(f => ({
-                      ...f, selectedItems: e.target.checked
-                        ? [...f.selectedItems, item.id]
-                        : f.selectedItems.filter(id => id !== item.id),
-                    }))} />
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">{item.name}</p>
-                    {item.description && <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>}
-                    <p className="mt-1 text-xs text-neutral-400">{fmt(item.priceCents)}{item.durationMin ? ` · ${item.durationMin} min` : ''}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold">Choose services</h2>
+            {form.pets.filter(p => p.name).map((pet, i) => {
+              const petIdx = form.pets.findIndex(p => p === pet);
+              return (
+                <div key={petIdx} className="space-y-3">
+                  <p className="text-sm font-semibold">{pet.name}{pet.breed ? ` · ${pet.breed}` : ''}</p>
+                  {packages.map(item => {
+                    const selected = pet.selectedItems.includes(item.id);
+                    return (
+                      <label key={item.id}
+                        className={`flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition ${selected ? 'bg-neutral-50' : 'hover:bg-neutral-50'}`}
+                        style={selected ? { borderColor: brand } : {}}>
+                        <input type="checkbox" className="mt-0.5 h-4 w-4" checked={selected}
+                          onChange={e => setForm(f => ({
+                            ...f, pets: f.pets.map((p, idx) => idx === petIdx ? {
+                              ...p, selectedItems: e.target.checked ? [...p.selectedItems, item.id] : p.selectedItems.filter(id => id !== item.id),
+                            } : p),
+                          }))} />
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">{item.name}</p>
+                          {item.description && <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>}
+                          <p className="mt-1 text-xs text-neutral-400">{fmt(item.priceCents)}{item.durationMin ? ` · ${item.durationMin} min` : ''}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              );
+            })}
             <div className="flex gap-3">
               <button onClick={() => setStep('pet')} className="flex-1 rounded-xl border py-3 text-sm font-medium">Back</button>
               <button onClick={() => setStep('schedule')}
@@ -286,15 +314,15 @@ export default function BookFlow() {
             <div className="rounded-xl border bg-white p-5 shadow-sm space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-neutral-500">Customer</span><span className="font-medium">{form.fullName}</span></div>
               {form.phone && <div className="flex justify-between"><span className="text-neutral-500">Phone</span><span>{form.phone}</span></div>}
-              {form.petName && <div className="flex justify-between"><span className="text-neutral-500">Pet</span><span className="font-medium">{form.petName}{form.petBreed && ` (${form.petBreed})`}</span></div>}
               <div className="flex justify-between"><span className="text-neutral-500">Date</span><span>{new Date(form.scheduledStart).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })}</span></div>
               <div className="flex justify-between"><span className="text-neutral-500">Location</span><span>{tenant.stores.find(s => s.id === form.storeId)?.name}</span></div>
-              {form.selectedItems.length > 0 && (
-                <div>
-                  <p className="text-neutral-500 mb-1">Services</p>
-                  {form.selectedItems.map(id => { const item = catalog.find(c => c.id === id); return item ? <p key={id} className="font-medium">{item.name} — {fmt(item.priceCents)}</p> : null; })}
+              {form.pets.filter(p => p.name).map((pet, i) => (
+                <div key={i} className="border-t pt-2">
+                  <p className="font-medium">{pet.name}{pet.breed && ` (${pet.breed})`}</p>
+                  {pet.selectedItems.map(id => { const item = catalog.find(c => c.id === id); return item ? <p key={id} className="text-xs text-neutral-500">{item.name} — {fmt(item.priceCents)}</p> : null; })}
+                  {pet.selectedItems.length === 0 && <p className="text-xs text-neutral-400">No services selected</p>}
                 </div>
-              )}
+              ))}
             </div>
             <p className="text-xs text-neutral-400 text-center">Your booking is pending approval. We&apos;ll confirm it shortly.</p>
             {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
