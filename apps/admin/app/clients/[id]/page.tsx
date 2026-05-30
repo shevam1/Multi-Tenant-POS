@@ -13,6 +13,7 @@ interface VaccinationRecord { id: string; vaccineType: string; expiresAt: string
 interface Pet {
   id: string; name: string; species: string; breed: string | null; weightKg: number | null;
   dateOfBirth: string | null; gender: string | null; hairLength: string | null; isFixed: boolean;
+  photoUrl: string | null;
   tags: string[]; allergies: string | null; medicalNotes: string | null; groomNotes: string | null;
   preferredGroomerId: string | null; vaccinations: VaccinationRecord[];
 }
@@ -107,6 +108,7 @@ export default function ClientDetailPage() {
 
   const [paymentLinkModal, setPaymentLinkModal] = useState(false);
   const [creditModal, setCreditModal] = useState(false);
+  const [cardModal, setCardModal] = useState(false);
 
   const [prefs, setPrefs] = useState<Partial<Customer>>({});
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -440,7 +442,12 @@ export default function ClientDetailPage() {
                     <div key={pet.id} className="rounded-xl border bg-white shadow-sm overflow-hidden">
                       {/* Pet header */}
                       <div className="flex items-center gap-3 p-4 border-b">
-                        <div className="text-3xl">🐾</div>
+                        {pet.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={pet.photoUrl} alt={pet.name} className="h-12 w-12 rounded-full object-cover border" />
+                        ) : (
+                          <div className="text-3xl">🐾</div>
+                        )}
                         <div className="flex-1">
                           <p className="font-semibold">{pet.name}
                             <span className="ml-2 text-sm font-normal text-neutral-500">
@@ -560,11 +567,7 @@ export default function ClientDetailPage() {
                 <p className="text-sm text-neutral-400">No card on file</p>
               )}
               <div className="flex gap-2 mt-4">
-                <button
-                  onClick={async () => {
-                    const res = await apiFetch<{ clientSecret: string }>(`/pos/setup-intent/${id}`, { method: 'POST' });
-                    alert(`Setup intent created. In production, use Stripe.js with client_secret:\n${res.clientSecret}`);
-                  }}
+                <button onClick={() => setCardModal(true)}
                   className="rounded-md bg-amber-400 px-3 py-1.5 text-xs font-bold text-neutral-900 hover:bg-amber-500">
                   + Card
                 </button>
@@ -587,6 +590,7 @@ export default function ClientDetailPage() {
       {editPet && <PetFormModal customerId={id} pet={editPet} onClose={() => setEditPet(null)} onSaved={() => { setEditPet(null); load(); }} />}
       {paymentLinkModal && <PaymentLinkModal customerId={id} onClose={() => setPaymentLinkModal(false)} />}
       {creditModal && <CreditModal customerId={id} current={customer.statementCreditCents} onClose={() => setCreditModal(false)} onSaved={() => { setCreditModal(false); load(); }} />}
+      {cardModal && <AddCardModal customerId={id} onClose={() => setCardModal(false)} onSaved={() => { setCardModal(false); load(); }} />}
     </div>
   );
 }
@@ -730,6 +734,66 @@ function PaymentLinkModal({ customerId, onClose }: { customerId: string; onClose
             {loading ? 'Generating…' : 'Generate'}
           </button>
           <button onClick={onClose} className="flex-1 rounded-lg border py-2 text-sm">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Stripe predefined test payment-method tokens (test mode only).
+ *  https://docs.stripe.com/testing?testing-method=payment-methods#cards */
+const TEST_CARDS = [
+  { token: 'pm_card_visa', label: 'Visa', number: '4242 4242 4242 4242', desc: 'Succeeds' },
+  { token: 'pm_card_mastercard', label: 'Mastercard', number: '5555 5555 5555 4444', desc: 'Succeeds' },
+  { token: 'pm_card_amex', label: 'Amex', number: '3782 822463 10005', desc: 'Succeeds' },
+  { token: 'pm_card_visa_debit', label: 'Visa debit', number: '4000 0566 5566 5556', desc: 'Succeeds' },
+  { token: 'pm_card_chargeDeclined', label: 'Declined card', number: '4000 0000 0000 0002', desc: 'Always declines' },
+];
+
+function AddCardModal({ customerId, onClose, onSaved }: { customerId: string; onClose: () => void; onSaved: () => void }) {
+  const [token, setToken] = useState('pm_card_visa');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save() {
+    setSaving(true); setError('');
+    try {
+      await apiFetch(`/pos/customers/${customerId}/attach-test-card`, {
+        method: 'POST', body: JSON.stringify({ token }),
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to attach card');
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-[420px] rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+        <h2 className="font-bold text-lg">Add card on file</h2>
+        <p className="text-xs text-neutral-500">
+          Test mode — pick a Stripe test card. In production this uses Stripe.js Elements
+          to securely tokenize a real card (PCI-compliant, no raw numbers touch our server).
+        </p>
+        {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        <div className="space-y-2">
+          {TEST_CARDS.map(c => (
+            <label key={c.token}
+              className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer ${token === c.token ? 'border-brand bg-brand/5' : 'hover:bg-neutral-50'}`}>
+              <input type="radio" name="card" checked={token === c.token} onChange={() => setToken(c.token)} />
+              <div className="flex-1">
+                <p className="text-sm font-medium">{c.label} <span className="font-normal text-neutral-400">·· {c.number.slice(-4)}</span></p>
+                <p className="text-xs text-neutral-400">{c.number} — {c.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={save} disabled={saving}
+            className="flex-1 rounded-lg bg-amber-400 py-2 text-sm font-bold text-neutral-900 disabled:opacity-50 hover:bg-amber-500">
+            {saving ? 'Attaching…' : 'Add card'}
+          </button>
+          <button onClick={onClose} className="flex-1 rounded-lg border py-2 text-sm">Cancel</button>
         </div>
       </div>
     </div>

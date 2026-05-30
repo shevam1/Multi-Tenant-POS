@@ -13,6 +13,7 @@ interface Pet {
   weightKg: number | null;
   hairLength: string | null;
   isFixed: boolean;
+  photoUrl: string | null;
   tags: string[];
   allergies: string | null;
   medicalNotes: string | null;
@@ -39,6 +40,7 @@ export default function PetFormModal({ customerId, pet, onClose, onSaved }: Prop
     weightKg: pet?.weightKg ? String(pet.weightKg) : '',
     hairLength: pet?.hairLength ?? '',
     isFixed: pet?.isFixed ?? false,
+    photoUrl: pet?.photoUrl ?? '',
     allergies: pet?.allergies ?? '',
     medicalNotes: pet?.medicalNotes ?? '',
     groomNotes: pet?.groomNotes ?? '',
@@ -75,6 +77,7 @@ export default function PetFormModal({ customerId, pet, onClose, onSaved }: Prop
         weightKg: form.weightKg ? parseFloat(form.weightKg) : null,
         hairLength: form.hairLength || null,
         isFixed: form.isFixed,
+        photoUrl: form.photoUrl || null,
         allergies: form.allergies || null,
         medicalNotes: form.medicalNotes || null,
         groomNotes: form.groomNotes || null,
@@ -104,6 +107,33 @@ export default function PetFormModal({ customerId, pet, onClose, onSaved }: Prop
 
         <div className="flex-1 px-6 py-5 space-y-4">
           {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+          {/* Profile picture */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              {form.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.photoUrl} alt="pet" className="h-20 w-20 rounded-full object-cover border" />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-neutral-100 text-3xl">🐾</div>
+              )}
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-neutral-500 mb-1">Profile picture</label>
+              <input type="file" accept="image/*" className="text-xs"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 1_500_000) { alert('Image too large (max 1.5 MB)'); return; }
+                  const reader = new FileReader();
+                  reader.onload = () => set('photoUrl', reader.result as string);
+                  reader.readAsDataURL(file);
+                }} />
+              {form.photoUrl && (
+                <button type="button" onClick={() => set('photoUrl', '')} className="block mt-1 text-xs text-red-500 hover:text-red-700">Remove photo</button>
+              )}
+            </div>
+          </div>
 
           <div>
             <label className="block text-xs font-medium text-neutral-500 mb-1">Pet name *</label>

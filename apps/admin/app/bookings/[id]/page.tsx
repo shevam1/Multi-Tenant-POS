@@ -15,7 +15,7 @@ interface BookingDetail {
   lineItems: { id: string; description: string; unitPriceCents: number }[];
   workflow: { stage: string; occurredAt: string }[];
   consents: { formType: string; signedAt: string | null }[];
-  invoice: { status: string; totalCents: number; taxLines: { component: string; rate: number; amountCents: number }[] } | null;
+  invoice: { status: string; totalCents: number; subtotalCents: number; discountCents: number; tipCents: number; cashRoundingCents: number; taxLines: { component: string; rate: number; amountCents: number }[] } | null;
 }
 
 const WORKFLOW_STAGES = ['CHECK_IN','BEFORE_PHOTOS','BATH','DRYING','STYLING','NAILS','QUALITY_CHECK','AFTER_PHOTOS','READY'];
@@ -55,6 +55,38 @@ export default function BookingDetailPage() {
     const link = `${webBase}/sign/${id}`;
     navigator.clipboard.writeText(link);
     alert(`Pre-visit signing link copied:\n${link}\n\nSend this to the client to sign on their own device.`);
+  }
+
+  async function reload() { apiFetch<BookingDetail>(`/bookings/${id}`).then(setBooking); }
+
+  async function markNoShow() {
+    const feeStr = prompt('No-show fee (CAD)? Charges card on file, else deducts statement credit. Leave 0 for none.', '25');
+    if (feeStr === null) return;
+    const feeCents = Math.round(parseFloat(feeStr || '0') * 100);
+    try {
+      const res = await apiFetch<{ chargeMethod?: string; note?: string }>(`/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ feeCents }) });
+      alert(feeCents > 0 ? `Marked NO_SHOW. Fee ${res.chargeMethod === 'card' ? 'charged to card' : res.chargeMethod === 'credit' ? 'deducted from credit' : 'not collected'}.${res.note ? '\n' + res.note : ''}` : 'Marked NO_SHOW.');
+      reload();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+  }
+
+  async function cancelBooking() {
+    const reason = prompt('Cancellation reason?');
+    if (reason === null) return;
+    const feeStr = prompt('Cancellation fee (CAD)? Charges card on file. Leave 0 for none.', '0');
+    const feeCents = Math.round(parseFloat(feeStr || '0') * 100);
+    try {
+      await apiFetch(`/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason, feeCents }) });
+      reload();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
+  }
+
+  async function closeBooking() {
+    if (!confirm('Force-close this booking as COMPLETED?')) return;
+    try {
+      await apiFetch(`/bookings/${id}/close`, { method: 'POST' });
+      reload();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed'); }
   }
 
   if (loading) return <div className="p-8 text-sm text-neutral-500">Loading…</div>;
@@ -166,21 +198,52 @@ export default function BookingDetailPage() {
                 Approve booking
               </button>
             )}
-            <a href={`/pos/checkout/${booking.id}`}
-              className="block w-full rounded-md border py-2 text-center text-sm font-medium hover:bg-neutral-50">
-              POS checkout
-            </a>
+            {/* POS checkout — only when there's something to charge and not already invoiced */}
+            {!booking.invoice && !['CANCELLED', 'NO_SHOW'].includes(booking.status) && (
+              <a href={`/pos/checkout/${booking.id}`}
+                className="block w-full rounded-md bg-brand py-2 text-center text-sm font-medium text-white hover:opacity-90">
+                POS checkout
+              </a>
+            )}
+
+            {/* Process flows for active bookings */}
+            {!['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(booking.status) && (
+              <div className="pt-2 border-t space-y-2">
+                <p className="text-xs font-semibold text-neutral-400 uppercase">Process flow</p>
+                {['CONFIRMED', 'LATE'].includes(booking.status) && (
+                  <button onClick={markNoShow} className="w-full rounded-md border border-orange-200 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50">
+                    Mark no-show
+                  </button>
+                )}
+                {['CHECKED_IN', 'IN_PROGRESS', 'READY'].includes(booking.status) && (
+                  <button onClick={closeBooking} className="w-full rounded-md border border-blue-200 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                    Force-close (unclosed → completed)
+                  </button>
+                )}
+                <button onClick={cancelBooking} className="w-full rounded-md border border-red-200 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
+                  Cancel booking
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Invoice */}
           {booking.invoice && (
-            <div className="rounded-xl border bg-white p-5 shadow-sm text-sm">
-              <h2 className="mb-3 font-semibold">Invoice</h2>
-              <p className="text-neutral-500">Status: <span className="font-medium text-neutral-900">{booking.invoice.status}</span></p>
+            <div className="rounded-xl border bg-white p-5 shadow-sm text-sm space-y-1">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-semibold">Invoice</h2>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${booking.invoice.status === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{booking.invoice.status}</span>
+              </div>
+              <div className="flex justify-between text-neutral-500"><span>Subtotal</span><span>${(booking.invoice.subtotalCents / 100).toFixed(2)}</span></div>
+              {booking.invoice.discountCents > 0 && (
+                <div className="flex justify-between text-green-600"><span>Credit / discount applied</span><span>−${(booking.invoice.discountCents / 100).toFixed(2)}</span></div>
+              )}
               {booking.invoice.taxLines.map(t => (
-                <p key={t.component} className="text-neutral-500">{t.component} ({(t.rate * 100).toFixed(2)}%): ${(t.amountCents / 100).toFixed(2)}</p>
+                <div key={t.component} className="flex justify-between text-neutral-500"><span>{t.component} ({(t.rate * 100).toFixed(2)}%)</span><span>${(t.amountCents / 100).toFixed(2)}</span></div>
               ))}
-              <p className="mt-2 font-semibold">Total: ${(booking.invoice.totalCents / 100).toFixed(2)} CAD</p>
+              {booking.invoice.tipCents > 0 && <div className="flex justify-between text-neutral-500"><span>Tip</span><span>${(booking.invoice.tipCents / 100).toFixed(2)}</span></div>}
+              {booking.invoice.cashRoundingCents !== 0 && <div className="flex justify-between text-neutral-500"><span>Cash rounding</span><span>${(booking.invoice.cashRoundingCents / 100).toFixed(2)}</span></div>}
+              <div className="flex justify-between pt-2 mt-1 border-t font-semibold"><span>Total</span><span>${(booking.invoice.totalCents / 100).toFixed(2)} CAD</span></div>
             </div>
           )}
 

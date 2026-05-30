@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { VaccinationsService } from '../vaccinations/vaccinations.service';
 import { FormsService } from '../forms/forms.service';
+import { StripeService } from '../stripe/stripe.service';
 import type { CreateBookingDto } from './dto/create-booking.dto';
 import type { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 
@@ -36,6 +37,7 @@ export class BookingsService {
     private readonly realtime: RealtimeGateway,
     private readonly vaccinations: VaccinationsService,
     private readonly forms: FormsService,
+    private readonly stripe: StripeService,
   ) {}
 
   async listForStore(storeId: string, date?: string) {
@@ -63,6 +65,7 @@ export class BookingsService {
     const b = await this.prisma.db.booking.findUnique({
       where: { id },
       include: {
+        store: true,
         customer: true,
         pet: { include: { vaccinations: true } },
         lineItems: { include: { catalogItem: true } },
@@ -187,5 +190,84 @@ export class BookingsService {
     return this.prisma.db.consentSubmission.create({
       data: { tenantId, bookingId, formType, signature, signedAt: new Date(), payload },
     });
+  }
+
+  /**
+   * Mark a booking as NO_SHOW.
+   * If feeCents > 0 AND the customer has a card on file, charge the fee via Stripe.
+   * If feeCents > 0 AND no card → deduct from statement credit (minimum $0).
+   */
+  async markNoShow(id: string, feeCents = 0) {
+    const booking = await this.prisma.db.booking.findUnique({
+      where: { id },
+      include: { customer: true, store: { select: { name: true } } },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    await this.updateStatus(id, { status: 'NO_SHOW' });
+
+    const result: Record<string, unknown> = { bookingId: id, status: 'NO_SHOW', feeCents };
+
+    if (feeCents > 0) {
+      if (booking.customer.stripeCustomerId) {
+        // Charge card on file
+        const pi = await this.stripe.createPaymentIntent({
+          amountCents: feeCents,
+          currency: 'cad',
+          stripeCustomerId: booking.customer.stripeCustomerId,
+          metadata: { bookingId: id, reason: 'no_show_fee' },
+        });
+        result.stripeCharge = pi?.id ?? null;
+        result.chargeMethod = 'card';
+      } else if (booking.customer.statementCreditCents >= feeCents) {
+        await this.prisma.db.customer.update({
+          where: { id: booking.customerId },
+          data: { statementCreditCents: { decrement: feeCents } },
+        });
+        result.chargeMethod = 'credit';
+      } else {
+        result.chargeMethod = 'none';
+        result.note = 'No card or insufficient credit — fee not collected';
+      }
+    }
+
+    await this.audit.log({ action: 'BOOKING_NO_SHOW', entityType: 'booking', entityId: id, metadata: result });
+    return result;
+  }
+
+  /**
+   * Cancel a booking with an optional cancellation fee.
+   */
+  async cancelBooking(id: string, reason?: string, feeCents = 0) {
+    const booking = await this.prisma.db.booking.findUnique({
+      where: { id }, include: { customer: true },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    await this.updateStatus(id, { status: 'CANCELLED' });
+
+    const result: Record<string, unknown> = { bookingId: id, status: 'CANCELLED', reason, feeCents };
+
+    if (feeCents > 0 && booking.customer.stripeCustomerId) {
+      const pi = await this.stripe.createPaymentIntent({
+        amountCents: feeCents,
+        currency: 'cad',
+        stripeCustomerId: booking.customer.stripeCustomerId,
+        metadata: { bookingId: id, reason: 'cancellation_fee' },
+      });
+      result.stripeCharge = pi?.id ?? null;
+    }
+
+    await this.audit.log({ action: 'BOOKING_CANCEL', entityType: 'booking', entityId: id, metadata: result });
+    return result;
+  }
+
+  /**
+   * Force-close an unclosed booking (CHECKED_IN / IN_PROGRESS / READY → COMPLETED).
+   */
+  async closeBooking(id: string) {
+    await this.updateStatus(id, { status: 'COMPLETED' });
+    await this.audit.log({ action: 'BOOKING_FORCE_CLOSE', entityType: 'booking', entityId: id });
+    return { bookingId: id, status: 'COMPLETED' };
   }
 }

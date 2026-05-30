@@ -219,6 +219,35 @@ export class PosService {
     return { url: link.url, linkId: link.id };
   }
 
+  /**
+   * Attach a Stripe test card to a customer (test mode only).
+   * Uses predefined Stripe test payment method tokens — no raw card numbers,
+   * no PCI scope. For production, replace with Stripe.js SetupIntent flow.
+   *
+   * Test token map: https://docs.stripe.com/testing?testing-method=payment-methods#cards
+   */
+  async attachTestCard(customerId: string, testToken: string) {
+    const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    if (!this.stripe.enabled) return { error: 'Stripe not configured' };
+
+    const stripeCustomerId = await this.stripe.ensureCustomer({
+      customerId, email: customer.email, name: customer.fullName,
+      stripeCustomerId: customer.stripeCustomerId,
+    });
+    if (stripeCustomerId && stripeCustomerId !== customer.stripeCustomerId) {
+      await this.prisma.db.customer.update({ where: { id: customerId }, data: { stripeCustomerId } });
+    }
+
+    // Attach the predefined test PM (pm_card_visa, pm_card_mastercard, etc.)
+    const pm = await this.stripe.client!.paymentMethods.attach(testToken, { customer: stripeCustomerId! });
+    // Set as default for invoices
+    await this.stripe.client!.customers.update(stripeCustomerId!, {
+      invoice_settings: { default_payment_method: pm.id },
+    });
+    return { id: pm.id, last4: pm.card?.last4, brand: pm.card?.brand, expMonth: pm.card?.exp_month, expYear: pm.card?.exp_year };
+  }
+
   /** Create a Stripe SetupIntent for card-on-file (booking intake). */
   async createSetupIntent(customerId: string) {
     const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });

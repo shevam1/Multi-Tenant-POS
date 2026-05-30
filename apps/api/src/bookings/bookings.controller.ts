@@ -54,4 +54,27 @@ export class BookingsController {
   ) {
     return this.bookings.submitConsent(id, formType, signature, payload ?? {}, user.tenantId);
   }
+
+  // ── Process flows: no-show / cancel / close ───────────────────────────────
+
+  /** Mark NO_SHOW; optionally charge a fee (card on file → Stripe; else credit). */
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Post(':id/no-show')
+  noShow(@Param('id') id: string, @Body('feeCents') feeCents?: number) {
+    return this.bookings.markNoShow(id, feeCents ?? 0);
+  }
+
+  /** Cancel with optional reason + cancellation fee. */
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string, @Body('reason') reason?: string, @Body('feeCents') feeCents?: number) {
+    return this.bookings.cancelBooking(id, reason, feeCents ?? 0);
+  }
+
+  /** Force-close an unclosed booking → COMPLETED. */
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
+  @Post(':id/close')
+  close(@Param('id') id: string) {
+    return this.bookings.closeBooking(id);
+  }
 }

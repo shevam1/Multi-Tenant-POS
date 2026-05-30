@@ -56,4 +56,24 @@ export class PosController {
   paymentMethods(@Param('customerId') customerId: string) {
     return this.pos.getPaymentMethods(customerId);
   }
+
+  /**
+   * Attach a test card using a Stripe predefined test token.
+   * In test mode these tokens bypass PCI requirements.
+   * Production: use SetupIntent + Stripe.js.
+   *
+   * Common test tokens:
+   *   pm_card_visa            — Visa 4242 (succeeds)
+   *   pm_card_mastercard      — Mastercard 5555 (succeeds)
+   *   pm_card_visa_debit      — Visa debit (succeeds)
+   *   pm_card_chargeDeclined  — always declines
+   */
+  @Roles('RECEPTION', 'STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Post('customers/:customerId/attach-test-card')
+  attachTestCard(
+    @Param('customerId') customerId: string,
+    @Body('token') token: string,
+  ) {
+    return this.pos.attachTestCard(customerId, token || 'pm_card_visa');
+  }
 }
