@@ -126,19 +126,11 @@ export default function DashboardPage() {
               {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           )}
-          {user?.permissions?.includes('staff.manage') && (
-            <a href="/staff" className="rounded-md bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-300">
-              Staff
-            </a>
-          )}
           {user?.permissions?.includes('calendar.view') && (
             <a href="/calendar" className="rounded-md bg-fuchsia-100 px-3 py-1.5 text-xs font-medium text-fuchsia-700 hover:bg-fuchsia-200">
               Calendar
             </a>
           )}
-          <a href="/scheduling" className="rounded-md bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-200">
-            Schedule
-          </a>
           <a href="/timeclock" className="rounded-md bg-teal-100 px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-200">
             Time Clock
           </a>
@@ -151,19 +143,9 @@ export default function DashboardPage() {
           <a href="/reminders" className="rounded-md bg-yellow-100 px-3 py-1.5 text-xs font-medium text-yellow-700 hover:bg-yellow-200">
             Reminders
           </a>
-          {user?.permissions?.includes('packages.manage') && (
-            <a href="/packages" className="rounded-md bg-cyan-100 px-3 py-1.5 text-xs font-medium text-cyan-700 hover:bg-cyan-200">
-              Packages
-            </a>
-          )}
           {user?.permissions?.includes('inventory.manage') && (
             <a href="/products" className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-200">
               Product Store
-            </a>
-          )}
-          {user?.permissions?.includes('coupons.manage') && (
-            <a href="/coupons" className="rounded-md bg-rose-100 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-200">
-              Coupons
             </a>
           )}
           <a href="/analytics" className="rounded-md bg-indigo-100 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-200">
@@ -174,17 +156,14 @@ export default function DashboardPage() {
               Sales &amp; Expense
             </a>
           )}
-          <a href="/memberships" className="rounded-md bg-violet-100 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-200">
-            Memberships
-          </a>
-          <a href="/forms" className="rounded-md bg-pink-100 px-3 py-1.5 text-xs font-medium text-pink-700 hover:bg-pink-200">
-            Forms
-          </a>
           <a href="/compliance" className="rounded-md bg-green-100 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200">
             Vaccine report
           </a>
           <a href="/groomer" className="rounded-md bg-purple-100 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-200">
             Groomer PWA
+          </a>
+          <a href="/settings" className="rounded-md bg-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-300">
+            ⚙ Settings
           </a>
           <button onClick={() => { localStorage.clear(); router.push('/login'); }}
             className="text-xs text-neutral-400 hover:text-neutral-600">Sign out</button>
