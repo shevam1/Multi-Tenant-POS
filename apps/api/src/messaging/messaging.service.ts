@@ -49,15 +49,18 @@ export class MessagingService {
     return { ok: true, provider: 'console' };
   }
 
-  async sendEmail(to: string | null, subject: string, body: string): Promise<SendResult> {
+  async sendEmail(to: string | null, subject: string, body: string, opts?: { cc?: string; bcc?: string }): Promise<SendResult> {
     if (!to) return { ok: false, provider: 'console', detail: 'No email on file' };
     if (this.emailEnabled) {
       try {
+        const personalization: Record<string, unknown> = { to: [{ email: to }] };
+        if (opts?.cc) personalization.cc = opts.cc.split(',').map(e => ({ email: e.trim() })).filter(e => e.email);
+        if (opts?.bcc) personalization.bcc = opts.bcc.split(',').map(e => ({ email: e.trim() })).filter(e => e.email);
         const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST',
           headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            personalizations: [{ to: [{ email: to }] }],
+            personalizations: [personalization],
             from: { email: process.env.SENDGRID_FROM ?? 'noreply@omnipos.dev' },
             subject,
             content: [{ type: 'text/plain', value: body }],
@@ -68,7 +71,7 @@ export class MessagingService {
         return { ok: false, provider: 'sendgrid', detail: (e as Error).message };
       }
     }
-    this.logger.log(`✉️  [EMAIL→${to}] ${subject}: ${body}`);
+    this.logger.log(`✉️  [EMAIL→${to}${opts?.cc ? ` cc:${opts.cc}` : ''}${opts?.bcc ? ` bcc:${opts.bcc}` : ''}] ${subject}: ${body}`);
     return { ok: true, provider: 'console' };
   }
 }

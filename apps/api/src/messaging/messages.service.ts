@@ -6,6 +6,9 @@ import { MessagingService } from './messaging.service';
 export interface SendMessageDto {
   channel: MessageChannel;
   body: string;
+  subject?: string;
+  cc?: string;
+  bcc?: string;
   attachments?: string[];
   scheduledFor?: string | null;
 }
@@ -98,14 +101,14 @@ export class MessagesService {
     if (status === 'SENT' && dto.channel !== 'SYSTEM') {
       const result = dto.channel === 'SMS'
         ? await this.messaging.sendSMS(thread.customer.phone, dto.body)
-        : await this.messaging.sendEmail(thread.customer.email, 'Message from your groomer', dto.body);
+        : await this.messaging.sendEmail(thread.customer.email, dto.subject ?? 'Message from your groomer', dto.body, { cc: dto.cc, bcc: dto.bcc });
       if (!result.ok) status = 'FAILED';
     }
 
     const message = await this.prisma.db.message.create({
       data: {
         tenantId, threadId, channel: dto.channel, direction: 'OUTBOUND',
-        body: dto.body, attachments: dto.attachments ?? [],
+        subject: dto.subject, body: dto.body, attachments: dto.attachments ?? [],
         status: status as 'SENT' | 'SCHEDULED' | 'FAILED', scheduledFor: scheduled, sentByUserId: userId,
       },
     });
@@ -128,6 +131,22 @@ export class MessagesService {
       data: { lastMessageAt: new Date(), lastMessagePreview: body.slice(0, 80), unread: true, status: 'OPEN' },
     });
     return message;
+  }
+
+  // ── Templates ──────────────────────────────────────────────────────────────
+
+  listTemplates() {
+    return this.prisma.db.messageTemplate.findMany({ orderBy: { name: 'asc' } });
+  }
+  createTemplate(dto: { name: string; channel: MessageChannel; subject?: string; body: string }, tenantId: string) {
+    return this.prisma.db.messageTemplate.create({ data: { tenantId, ...dto } });
+  }
+  updateTemplate(id: string, dto: { name?: string; channel?: MessageChannel; subject?: string; body?: string }) {
+    return this.prisma.db.messageTemplate.update({ where: { id }, data: dto });
+  }
+  async deleteTemplate(id: string) {
+    await this.prisma.db.messageTemplate.delete({ where: { id } });
+    return { deleted: true };
   }
 
   /** Post a [System] message into a customer's thread (e.g. "Client signed the agreement"). */

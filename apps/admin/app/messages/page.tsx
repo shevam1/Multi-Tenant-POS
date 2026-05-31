@@ -37,6 +37,18 @@ export default function MessagesPage() {
   const [picker, setPicker] = useState<CustomerOpt[]>([]);
   const [pickerQ, setPickerQ] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Email fields
+  const [subject, setSubject] = useState('');
+  const [cc, setCc] = useState('');
+  const [bcc, setBcc] = useState('');
+  const [signature, setSignature] = useState('');
+  // Templates + modals + profile pane
+  const [templates, setTemplates] = useState<{ id: string; name: string; channel: string; subject: string | null; body: string }[]>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [manageTemplates, setManageTemplates] = useState(false);
+  const [agreementModal, setAgreementModal] = useState(false);
+  const [receiptModal, setReceiptModal] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   const loadThreads = useCallback(async (f: string) => {
     const t = await apiFetch<Thread[]>(`/messages/threads?filter=${f}`).catch(() => []);
@@ -47,6 +59,18 @@ export default function MessagesPage() {
     if (!getToken()) { router.push('/login'); return; }
     loadThreads(filter).finally(() => setLoading(false));
   }, [router, filter, loadThreads]);
+
+  const loadTemplates = useCallback(() => {
+    apiFetch<typeof templates>('/messages/templates').then(setTemplates).catch(() => {});
+  }, []);
+  useEffect(() => { loadTemplates(); }, [loadTemplates]);
+
+  function applyTemplate(t: { channel: string; subject: string | null; body: string }) {
+    if (t.channel === 'EMAIL') { setChannel('EMAIL'); if (t.subject) setSubject(t.subject); }
+    else setChannel('SMS');
+    setDraft(t.body);
+    setShowTemplates(false);
+  }
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [active?.messages.length]);
 
@@ -60,26 +84,30 @@ export default function MessagesPage() {
     if (!active || (!draft.trim() && attachments.length === 0)) return;
     setSending(true);
     try {
+      const body = channel === 'EMAIL' && signature ? `${draft}\n\n${signature}` : draft;
       await apiFetch(`/messages/threads/${active.id}/send`, {
         method: 'POST',
-        body: JSON.stringify({ channel, body: draft || '(photo)', attachments, scheduledFor: scheduleFor || null }),
+        body: JSON.stringify({
+          channel, body: body || '(photo)', attachments, scheduledFor: scheduleFor || null,
+          ...(channel === 'EMAIL' ? { subject: subject || 'Message from your groomer', cc, bcc } : {}),
+        }),
       });
-      setDraft(''); setAttachments([]); setScheduleFor('');
+      setDraft(''); setAttachments([]); setScheduleFor(''); setSubject(''); setCc(''); setBcc('');
       openThread(active.id); loadThreads(filter);
     } catch (e) { alert(e instanceof Error ? e.message : 'Send failed'); }
     finally { setSending(false); }
   }
 
-  async function shareLink(kind: 'agreement' | 'book' | 'receipt') {
-    if (!active) return;
+  function shareBookOnline() {
     const webBase = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3001';
-    // Find the customer's latest booking for agreement/receipt links
-    const appts = await apiFetch<{ id: string }[]>(`/customers/${active.customer.id}/appointments?filter=all`).catch(() => []);
-    let body = '';
-    if (kind === 'book') body = `Book your next appointment: ${webBase}/book?tenant=pawsome`;
-    else if (kind === 'agreement') body = appts[0] ? `Please sign your service agreement: ${webBase}/sign/${appts[0].id}` : 'No booking to sign for.';
-    else body = appts[0] ? `Your receipt: ${webBase}/sign/${appts[0].id}` : 'No receipt available yet.';
-    setDraft(body);
+    setDraft(d => `${d ? d + '\n' : ''}Book your next appointment: ${webBase}/book?tenant=pawsome`);
+  }
+
+  async function addCardLink() {
+    if (!active) return;
+    const res = await apiFetch<{ url: string | null }>(`/pos/customers/${active.customer.id}/add-card-link`, { method: 'POST' }).catch(() => null);
+    if (res?.url) setDraft(d => `${d ? d + '\n' : ''}Add your payment card securely: ${res.url}`);
+    else alert('Stripe not configured — set STRIPE_SECRET_KEY.');
   }
 
   function onPhoto(file: File) {
@@ -181,6 +209,7 @@ export default function MessagesPage() {
                   <p className="font-semibold">{active.customer.fullName}</p>
                   <p className="text-xs text-neutral-400">{active.customer.phone ?? 'no phone'} · {active.customer.email ?? 'no email'}</p>
                 </div>
+                <button onClick={() => setShowProfile(p => !p)} className="rounded-md border px-3 py-1.5 text-xs hover:bg-neutral-50">View profile</button>
                 {active.customer.phone && (
                   <a href={`tel:${active.customer.phone}`} className="rounded-md bg-green-100 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200">📞 Call</a>
                 )}
@@ -215,10 +244,28 @@ export default function MessagesPage() {
 
               {/* Composer */}
               <div className="border-t bg-white p-4 space-y-2">
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <button onClick={() => shareLink('agreement')} className="rounded border px-2 py-1 hover:bg-neutral-50">Intake / Agreement</button>
-                  <button onClick={() => shareLink('book')} className="rounded border px-2 py-1 hover:bg-neutral-50">Book Online</button>
-                  <button onClick={() => shareLink('receipt')} className="rounded border px-2 py-1 hover:bg-neutral-50">Receipt</button>
+                <div className="flex flex-wrap gap-2 text-xs items-center">
+                  {/* Template picker */}
+                  <div className="relative">
+                    <button onClick={() => setShowTemplates(s => !s)} className="rounded border px-2 py-1 hover:bg-neutral-50">📄 Templates</button>
+                    {showTemplates && (
+                      <div className="absolute bottom-8 left-0 z-20 w-60 rounded-xl border bg-white p-2 shadow-xl">
+                        <div className="max-h-48 overflow-y-auto">
+                          {templates.filter(t => t.channel === channel || t.channel === 'SMS').map(t => (
+                            <button key={t.id} onClick={() => applyTemplate(t)} className="block w-full rounded px-2 py-1.5 text-left hover:bg-neutral-50">
+                              <span className="font-medium">{t.name}</span><span className="ml-1 text-neutral-400">{t.channel}</span>
+                            </button>
+                          ))}
+                          {templates.length === 0 && <p className="px-2 py-1 text-neutral-400">No templates yet.</p>}
+                        </div>
+                        <button onClick={() => { setShowTemplates(false); setManageTemplates(true); }} className="mt-1 w-full rounded bg-neutral-100 py-1 text-neutral-600 hover:bg-neutral-200">Manage templates</button>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => setAgreementModal(true)} className="rounded border px-2 py-1 hover:bg-neutral-50">Intake / Agreement</button>
+                  <button onClick={() => setReceiptModal(true)} className="rounded border px-2 py-1 hover:bg-neutral-50">Receipt</button>
+                  <button onClick={shareBookOnline} className="rounded border px-2 py-1 hover:bg-neutral-50">Book Online</button>
+                  <button onClick={addCardLink} className="rounded border px-2 py-1 hover:bg-neutral-50">Add Card</button>
                   <label className="rounded border px-2 py-1 hover:bg-neutral-50 cursor-pointer">📷 Photo
                     <input type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onPhoto(f); }} />
                   </label>
@@ -228,6 +275,19 @@ export default function MessagesPage() {
                     <button onClick={() => setChannel('EMAIL')} className={`rounded px-2 py-1 ${channel === 'EMAIL' ? 'bg-brand text-white' : 'border'}`}>Email</button>
                   </div>
                 </div>
+
+                {/* Email header fields */}
+                {channel === 'EMAIL' && (
+                  <div className="space-y-1.5 rounded-lg border bg-neutral-50 p-2">
+                    <input className="w-full rounded border px-2 py-1 text-sm" placeholder="Subject" value={subject} onChange={e => setSubject(e.target.value)} />
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input className="rounded border px-2 py-1 text-xs" placeholder="Cc (comma-separated)" value={cc} onChange={e => setCc(e.target.value)} />
+                      <input className="rounded border px-2 py-1 text-xs" placeholder="Bcc" value={bcc} onChange={e => setBcc(e.target.value)} />
+                    </div>
+                    <input className="w-full rounded border px-2 py-1 text-xs" placeholder="Signature (appended to email)" value={signature} onChange={e => setSignature(e.target.value)} />
+                  </div>
+                )}
+
                 {attachments.length > 0 && (
                   <div className="flex gap-2">
                     {attachments.map((a, i) => (
@@ -251,6 +311,150 @@ export default function MessagesPage() {
             </>
           )}
         </main>
+
+        {/* Right profile pane */}
+        {active && showProfile && (
+          <ProfilePane customerId={active.customer.id} onClose={() => setShowProfile(false)} />
+        )}
+      </div>
+
+      {manageTemplates && <TemplateManager templates={templates} onClose={() => setManageTemplates(false)} onChanged={loadTemplates} />}
+      {active && agreementModal && <AgreementModal customerId={active.customer.id} onClose={() => setAgreementModal(false)} onShare={link => { setDraft(d => `${d ? d + '\n' : ''}${link}`); setAgreementModal(false); }} />}
+      {active && receiptModal && <ReceiptModal customerId={active.customer.id} onClose={() => setReceiptModal(false)} onShare={link => { setDraft(d => `${d ? d + '\n' : ''}${link}`); setReceiptModal(false); }} />}
+    </div>
+  );
+}
+
+// ── Profile pane ──────────────────────────────────────────────────────────────
+function ProfilePane({ customerId, onClose }: { customerId: string; onClose: () => void }) {
+  const [c, setC] = useState<{ fullName: string; phone: string | null; email: string | null; addressLine: string | null; city: string | null; tags: string[]; loyaltyPoints: number; statementCreditCents: number; membershipTier: string | null; pets: { id: string; name: string; breed: string | null }[] } | null>(null);
+  useEffect(() => { apiFetch<typeof c>(`/customers/${customerId}`).then(setC).catch(() => {}); }, [customerId]);
+  return (
+    <aside className="w-72 shrink-0 border-l bg-white overflow-y-auto">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <h3 className="font-semibold text-sm">Profile</h3>
+        <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">×</button>
+      </div>
+      {!c ? <p className="p-4 text-sm text-neutral-400">Loading…</p> : (
+        <div className="p-4 space-y-3 text-sm">
+          <p className="font-semibold">{c.fullName}</p>
+          {c.membershipTier && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">{c.membershipTier}</span>}
+          <div className="space-y-1 text-neutral-600">
+            {c.phone && <p>📞 {c.phone}</p>}
+            {c.email && <p>✉ {c.email}</p>}
+            {(c.addressLine || c.city) && <p>🏠 {[c.addressLine, c.city].filter(Boolean).join(', ')}</p>}
+          </div>
+          <div className="flex gap-2 text-xs">
+            <span className="rounded bg-neutral-100 px-2 py-1">{c.loyaltyPoints} pts</span>
+            <span className="rounded bg-neutral-100 px-2 py-1">Credit ${(c.statementCreditCents / 100).toFixed(2)}</span>
+          </div>
+          {c.tags.length > 0 && <div className="flex flex-wrap gap-1">{c.tags.map(t => <span key={t} className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs">{t}</span>)}</div>}
+          <div>
+            <p className="text-xs font-semibold text-neutral-400 uppercase mb-1">Pets</p>
+            {c.pets.map(p => <p key={p.id} className="text-sm">{p.name} <span className="text-neutral-400">{p.breed}</span></p>)}
+          </div>
+          <a href={`/clients/${customerId}`} className="block rounded-md border py-1.5 text-center text-xs hover:bg-neutral-50">Open full profile →</a>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+// ── Template manager ────────────────────────────────────────────────────────
+function TemplateManager({ templates, onClose, onChanged }: { templates: { id: string; name: string; channel: string; subject: string | null; body: string }[]; onClose: () => void; onChanged: () => void }) {
+  const [form, setForm] = useState({ name: '', channel: 'SMS', subject: '', body: '' });
+  async function add() {
+    if (!form.name.trim() || !form.body.trim()) return;
+    await apiFetch('/messages/templates', { method: 'POST', body: JSON.stringify(form) });
+    setForm({ name: '', channel: 'SMS', subject: '', body: '' }); onChanged();
+  }
+  async function del(id: string) { await apiFetch(`/messages/templates/${id}`, { method: 'DELETE' }); onChanged(); }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between"><h2 className="font-bold text-lg">Message templates</h2><button onClick={onClose} className="text-neutral-400 text-xl">×</button></div>
+        <div className="rounded-xl border p-4 space-y-2">
+          <div className="flex gap-2">
+            <input className="flex-1 rounded border px-2 py-1.5 text-sm" placeholder="Template name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            <select className="rounded border px-2 py-1.5 text-sm bg-white" value={form.channel} onChange={e => setForm(f => ({ ...f, channel: e.target.value }))}><option value="SMS">SMS</option><option value="EMAIL">Email</option></select>
+          </div>
+          {form.channel === 'EMAIL' && <input className="w-full rounded border px-2 py-1.5 text-sm" placeholder="Subject" value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} />}
+          <textarea rows={3} className="w-full rounded border px-2 py-1.5 text-sm resize-none" placeholder="Template body — supports {{customerName}} {{petName}}" value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} />
+          <button onClick={add} className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white">Add template</button>
+        </div>
+        <div className="divide-y">
+          {templates.map(t => (
+            <div key={t.id} className="flex items-start justify-between py-2">
+              <div><p className="text-sm font-medium">{t.name} <span className="text-xs text-neutral-400">{t.channel}</span></p><p className="text-xs text-neutral-500">{t.body.slice(0, 60)}</p></div>
+              <button onClick={() => del(t.id)} className="text-xs text-red-400 hover:underline">delete</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Agreement form selector ───────────────────────────────────────────────────
+function AgreementModal({ customerId, onClose, onShare }: { customerId: string; onClose: () => void; onShare: (link: string) => void }) {
+  const [bookings, setBookings] = useState<{ id: string; scheduledStart: string }[]>([]);
+  const [forms, setForms] = useState<{ formType: string; title: string }[]>([]);
+  const [bookingId, setBookingId] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  useEffect(() => {
+    apiFetch<{ id: string; scheduledStart: string }[]>(`/customers/${customerId}/appointments?filter=all`).then(b => { setBookings(b); if (b[0]) setBookingId(b[0].id); }).catch(() => {});
+    apiFetch<{ formType: string; title: string }[]>('/forms/effective').then(setForms).catch(() => {});
+  }, [customerId]);
+  function toggle(ft: string) { setSelected(s => s.includes(ft) ? s.filter(x => x !== ft) : [...s, ft]); }
+  function share() {
+    const webBase = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3001';
+    const q = selected.length ? `?forms=${selected.join(',')}` : '';
+    onShare(`Please sign your agreement: ${webBase}/sign/${bookingId}${q}`);
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-[420px] rounded-2xl bg-white p-6 shadow-2xl space-y-3">
+        <h2 className="font-bold text-lg">Share agreements for signature</h2>
+        <div><label className="block text-xs text-neutral-500 mb-1">For appointment</label>
+          <select className="w-full rounded-lg border px-3 py-2 text-sm bg-white" value={bookingId} onChange={e => setBookingId(e.target.value)}>
+            {bookings.map(b => <option key={b.id} value={b.id}>{new Date(b.scheduledStart).toLocaleDateString('en-CA')} · #{b.id.slice(-6)}</option>)}
+            {bookings.length === 0 && <option value="">No bookings</option>}
+          </select>
+        </div>
+        <div><p className="text-xs text-neutral-500 mb-1">Choose agreements (none = all)</p>
+          <div className="space-y-1">
+            {forms.map(f => <label key={f.formType} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.includes(f.formType)} onChange={() => toggle(f.formType)} />{f.title}</label>)}
+          </div>
+        </div>
+        <div className="flex gap-2"><button onClick={share} disabled={!bookingId} className="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-white disabled:opacity-50">Add link to message</button><button onClick={onClose} className="flex-1 rounded-lg border py-2 text-sm">Cancel</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ── Receipt selector ──────────────────────────────────────────────────────────
+function ReceiptModal({ customerId, onClose, onShare }: { customerId: string; onClose: () => void; onShare: (link: string) => void }) {
+  const [bookings, setBookings] = useState<{ id: string; scheduledStart: string; invoice: { totalCents: number } | null; lineItems: { description: string }[] }[]>([]);
+  useEffect(() => { apiFetch<typeof bookings>(`/customers/${customerId}/appointments?filter=completed`).then(setBookings).catch(() => {}); }, [customerId]);
+  function share(id: string) {
+    const webBase = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3001';
+    onShare(`Your receipt: ${webBase}/receipt/${id}`);
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-[420px] rounded-2xl bg-white p-6 shadow-2xl space-y-3">
+        <h2 className="font-bold text-lg">Send a receipt</h2>
+        <p className="text-xs text-neutral-500">Choose which order&apos;s receipt to send.</p>
+        <div className="max-h-72 overflow-y-auto divide-y">
+          {bookings.map(b => (
+            <button key={b.id} onClick={() => share(b.id)} className="flex w-full items-center justify-between py-2 text-left text-sm hover:bg-neutral-50 px-1">
+              <span>{new Date(b.scheduledStart).toLocaleDateString('en-CA')}<span className="block text-xs text-neutral-400">{b.lineItems.map(l => l.description).join(', ').slice(0, 40)}</span></span>
+              <span className="font-medium">{b.invoice ? `$${(b.invoice.totalCents / 100).toFixed(2)}` : '—'}</span>
+            </button>
+          ))}
+          {bookings.length === 0 && <p className="py-4 text-center text-sm text-neutral-400">No completed orders.</p>}
+        </div>
+        <button onClick={onClose} className="w-full rounded-lg border py-2 text-sm">Cancel</button>
       </div>
     </div>
   );

@@ -103,4 +103,21 @@ export class StripeService {
     const si = await this.client.setupIntents.create({ customer: stripeCustomerId });
     return { clientSecret: si.client_secret };
   }
+
+  /**
+   * Hosted "add a card" link — a Stripe Checkout Session in setup mode. The
+   * customer opens the URL and saves a card to their profile (no PCI scope for
+   * us; works with just the secret key).
+   */
+  async createSetupCheckoutLink(stripeCustomerId: string, successUrl: string): Promise<{ url: string | null } | null> {
+    if (!this.client) return null;
+    const session = await this.client.checkout.sessions.create({
+      mode: 'setup',
+      customer: stripeCustomerId,
+      currency: 'cad',
+      success_url: successUrl,
+      cancel_url: successUrl,
+    });
+    return { url: session.url };
+  }
 }

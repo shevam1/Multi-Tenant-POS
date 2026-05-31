@@ -45,6 +45,24 @@ export class TenantsController {
     }, { timeout: 30000 });
   }
 
+  /** Public receipt view (bookingId is the unguessable token). */
+  @Public()
+  @Get('receipt/:bookingId')
+  async getReceipt(@Param('bookingId') bookingId: string) {
+    const invoice = await this.prisma.asSystem(tx =>
+      tx.invoice.findFirst({
+        where: { bookingId },
+        include: {
+          lines: true, taxLines: true, payments: { select: { tender: true, amountCents: true } },
+          store: { select: { name: true, addressLine: true, city: true, province: true } },
+          booking: { select: { scheduledStart: true, customer: { select: { fullName: true } }, pet: { select: { name: true } } } },
+        },
+      }),
+    );
+    if (!invoice) throw new NotFoundException('Receipt not found');
+    return invoice;
+  }
+
   @Public()
   @Get('tenant/:slug/availability')
   async getAvailability(@Param('slug') slug: string, @Query('storeId') storeId: string, @Query('date') date: string) {

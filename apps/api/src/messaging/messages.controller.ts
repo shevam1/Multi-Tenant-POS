@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import type { MessageChannel } from '@omnipos/db';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { MessagesService, SendMessageDto } from './messages.service';
@@ -7,6 +8,26 @@ import { MessagesService, SendMessageDto } from './messages.service';
 @Controller('messages')
 export class MessagesController {
   constructor(private readonly messages: MessagesService) {}
+
+  // ── Templates ──────────────────────────────────────────────────────────────
+
+  @Get('templates')
+  listTemplates() {
+    return this.messages.listTemplates();
+  }
+  @Post('templates')
+  createTemplate(@Body() dto: { name: string; channel: MessageChannel; subject?: string; body: string }, @CurrentUser() user: AuthUser) {
+    return this.messages.createTemplate(dto, user.tenantId);
+  }
+  @Patch('templates/:id')
+  updateTemplate(@Param('id') id: string, @Body() dto: { name?: string; channel?: MessageChannel; subject?: string; body?: string }) {
+    return this.messages.updateTemplate(id, dto);
+  }
+  @Delete('templates/:id')
+  @HttpCode(204)
+  deleteTemplate(@Param('id') id: string) {
+    return this.messages.deleteTemplate(id);
+  }
 
   @Get('threads')
   listThreads(@Query('filter') filter?: string) {

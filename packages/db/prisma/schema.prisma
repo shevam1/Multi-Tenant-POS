@@ -198,6 +198,7 @@ model Tenant {
   coupons          Coupon[]
   messageThreads   MessageThread[]
   automationRules  AutomationRule[]
+  messageTemplates MessageTemplate[]
   suppliers        Supplier[]
   productCategories ProductCategory[]
   products         Product[]
@@ -999,12 +1000,30 @@ model MessageThread {
   @@map("message_thread")
 }
 
+/// Reusable SMS/Email template (spec §10).
+model MessageTemplate {
+  id        String         @id @default(cuid())
+  tenantId  String
+  name      String
+  channel   MessageChannel @default(SMS)
+  subject   String?
+  body      String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("message_template")
+}
+
 model Message {
   id           String           @id @default(cuid())
   tenantId     String
   threadId     String
   channel      MessageChannel
   direction    MessageDirection
+  subject      String?
   body         String
   /// Image data URLs or shared links.
   attachments  String[]         @default([])

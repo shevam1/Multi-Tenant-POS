@@ -57,6 +57,13 @@ export class PosController {
     return this.pos.getPaymentMethods(customerId);
   }
 
+  /** Hosted add-card link to text/email the customer. */
+  @Roles('RECEPTION', 'STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'CALL_CENTER_AGENT')
+  @Post('customers/:customerId/add-card-link')
+  addCardLink(@Param('customerId') customerId: string) {
+    return this.pos.createAddCardLink(customerId);
+  }
+
   /**
    * Attach a test card using a Stripe predefined test token.
    * In test mode these tokens bypass PCI requirements.

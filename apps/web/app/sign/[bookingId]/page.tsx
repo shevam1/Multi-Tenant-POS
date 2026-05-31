@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 
 type FieldType = 'text' | 'checkbox' | 'date' | 'signature';
@@ -55,6 +55,9 @@ function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void }) {
 
 export default function SignPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
+  const sp = useSearchParams();
+  // Optional ?forms=TYPE1,TYPE2 — show only the requested agreements (staff-selected).
+  const onlyForms = (sp.get('forms') ?? '').split(',').map(s => s.trim()).filter(Boolean);
   const [session, setSession] = useState<Session | null>(null);
   const [active, setActive] = useState<SignForm | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
@@ -107,7 +110,8 @@ export default function SignPage() {
   if (error && !session) return <div className="p-8 text-center text-red-500">{error}</div>;
   if (!session) return <div className="flex min-h-screen items-center justify-center text-sm text-neutral-400">Loading…</div>;
 
-  const allMandatorySigned = session.forms.filter(f => f.mandatory).every(f => f.signed);
+  const visibleForms = onlyForms.length ? session.forms.filter(f => onlyForms.includes(f.formType)) : session.forms;
+  const allMandatorySigned = visibleForms.filter(f => f.mandatory).every(f => f.signed);
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -171,7 +175,7 @@ export default function SignPage() {
               </div>
             )}
 
-            {session.forms.map(f => (
+            {visibleForms.map(f => (
               <button key={f.formType} onClick={() => openForm(f)}
                 className="flex w-full items-center justify-between rounded-xl border bg-white p-4 text-left shadow-sm hover:shadow-md transition">
                 <div>

@@ -289,6 +289,23 @@ export class PosService {
     return { id: pm.id, last4: pm.card?.last4, brand: pm.card?.brand, expMonth: pm.card?.exp_month, expYear: pm.card?.exp_year };
   }
 
+  /** Hosted add-card link to send the customer (Stripe Checkout setup mode). */
+  async createAddCardLink(customerId: string) {
+    const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    if (!this.stripe.enabled) return { url: null, note: 'Stripe not configured' };
+
+    const stripeCustomerId = await this.stripe.ensureCustomer({
+      customerId, email: customer.email, name: customer.fullName, stripeCustomerId: customer.stripeCustomerId,
+    });
+    if (stripeCustomerId && stripeCustomerId !== customer.stripeCustomerId) {
+      await this.prisma.db.customer.update({ where: { id: customerId }, data: { stripeCustomerId } });
+    }
+    const webBase = process.env.WEB_URL ?? 'https://omnipos-web-beige.vercel.app';
+    const res = await this.stripe.createSetupCheckoutLink(stripeCustomerId!, `${webBase}/card-saved`);
+    return { url: res?.url ?? null };
+  }
+
   /** Create a Stripe SetupIntent for card-on-file (booking intake). */
   async createSetupIntent(customerId: string) {
     const customer = await this.prisma.db.customer.findUnique({ where: { id: customerId } });
