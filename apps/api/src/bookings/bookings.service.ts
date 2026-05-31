@@ -17,7 +17,7 @@ const DEFAULT_DEPOSIT_CENTS = 5000;
 
 /** Valid status transitions for the booking state machine. */
 const VALID_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
-  PENDING: ['CONFIRMED', 'CANCELLED'],
+  PENDING: ['CONFIRMED', 'CANCELLED', 'NO_SHOW'],
   CONFIRMED: ['CHECKED_IN', 'CANCELLED', 'NO_SHOW', 'LATE'],
   CHECKED_IN: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['READY', 'COMPLETED'],

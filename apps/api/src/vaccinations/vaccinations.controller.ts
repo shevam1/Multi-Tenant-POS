@@ -42,7 +42,7 @@ export class VaccinationsController {
    */
   @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')
   @Get('compliance')
-  compliance(@Query('storeId') storeId?: string) {
-    return this.svc.complianceReport(storeId);
+  compliance(@Query('storeId') storeId?: string, @Query('q') q?: string) {
+    return this.svc.complianceReport(storeId, q);
   }
 }

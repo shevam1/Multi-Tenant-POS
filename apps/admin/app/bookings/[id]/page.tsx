@@ -92,6 +92,24 @@ export default function BookingDetailPage() {
 
   async function reload() { apiFetch<BookingDetail>(`/bookings/${id}`).then(setBooking); }
 
+  async function reschedule() {
+    if (!booking) return;
+    const current = new Date(booking.scheduledStart);
+    const local = new Date(current.getTime() - current.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const input = prompt('New date & time (YYYY-MM-DDTHH:MM):', local);
+    if (!input) return;
+    try {
+      const start = new Date(input);
+      // Preserve duration if we have a scheduledEnd, else default 60 min
+      const end = new Date(start.getTime() + 60 * 60000);
+      await apiFetch(`/bookings/${id}/reschedule`, {
+        method: 'PATCH',
+        body: JSON.stringify({ scheduledStart: start.toISOString(), scheduledEnd: end.toISOString() }),
+      });
+      reload();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Reschedule failed'); }
+  }
+
   async function markNoShow() {
     const feeStr = prompt('No-show fee (CAD)? Charges card on file, else deducts statement credit. Leave 0 for none.', '25');
     if (feeStr === null) return;
@@ -313,7 +331,10 @@ export default function BookingDetailPage() {
             {!['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(booking.status) && (
               <div className="pt-2 border-t space-y-2">
                 <p className="text-xs font-semibold text-neutral-400 uppercase">Process flow</p>
-                {['CONFIRMED', 'LATE'].includes(booking.status) && (
+                <button onClick={reschedule} className="w-full rounded-md border border-neutral-300 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+                  Reschedule
+                </button>
+                {['PENDING', 'CONFIRMED', 'LATE'].includes(booking.status) && (
                   <button onClick={markNoShow} className="w-full rounded-md border border-orange-200 py-2 text-sm font-medium text-orange-600 hover:bg-orange-50">
                     Mark no-show
                   </button>

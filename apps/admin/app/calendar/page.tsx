@@ -140,7 +140,6 @@ export default function CalendarPage() {
 
   // Hour gridlines
   const hours = Array.from({ length: DAY_END_H - DAY_START_H + 1 }, (_, i) => DAY_START_H + i);
-  const slots = Array.from({ length: DAY_MINUTES / SLOT_MIN }, (_, i) => i * SLOT_MIN);
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -189,19 +188,21 @@ export default function CalendarPage() {
                   <div className="h-10 border-b bg-white flex items-center justify-center text-sm font-medium sticky top-0">
                     {col.name} <span className="ml-1 text-xs text-neutral-400">({colBookings.length})</span>
                   </div>
-                  <div className="relative bg-white" style={{ height: DAY_MINUTES * PX_PER_MIN }}>
+                  <div className="relative bg-white"
+                    style={{ height: DAY_MINUTES * PX_PER_MIN }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      // Snap the cursor's Y position to the nearest 30-min slot
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const offsetMin = (e.clientY - rect.top) / PX_PER_MIN;
+                      const slotMin = Math.max(0, Math.round(offsetMin / SLOT_MIN) * SLOT_MIN);
+                      onDrop(col.id, slotMin);
+                    }}>
                     {/* Hour gridlines */}
                     {hours.map(h => (
-                      <div key={h} className="absolute left-0 right-0 border-b border-neutral-100"
+                      <div key={h} className="absolute left-0 right-0 border-b border-neutral-100 pointer-events-none"
                         style={{ top: (h - DAY_START_H) * 60 * PX_PER_MIN }} />
-                    ))}
-                    {/* Drop slots */}
-                    {slots.map(slotMin => (
-                      <div key={slotMin}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={() => onDrop(col.id, slotMin)}
-                        className="absolute left-0 right-0 hover:bg-brand/5"
-                        style={{ top: slotMin * PX_PER_MIN, height: SLOT_MIN * PX_PER_MIN }} />
                     ))}
                     {/* Appointment cards */}
                     {colBookings.map(b => {
@@ -209,7 +210,7 @@ export default function CalendarPage() {
                       const height = Math.max(28, durationMin(b) * PX_PER_MIN - 2);
                       return (
                         <div key={b.id} draggable
-                          onDragStart={() => setDragId(b.id)}
+                          onDragStart={e => { setDragId(b.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', b.id); }}
                           onClick={() => router.push(`/bookings/${b.id}`)}
                           className={`absolute left-1 right-1 rounded-md border px-2 py-1 cursor-grab overflow-hidden shadow-sm hover:shadow-md ${STATUS_COLOR[b.status] ?? 'bg-white border-neutral-200'}`}
                           style={{ top, height }}>

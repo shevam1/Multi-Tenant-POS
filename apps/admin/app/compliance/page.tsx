@@ -12,6 +12,7 @@ interface VaccRecord {
 
 interface PetCompliance {
   petId: string;
+  customerId: string;
   petName: string;
   breed: string | null;
   ownerName: string;
@@ -44,6 +45,7 @@ export default function CompliancePage() {
   const [data, setData] = useState<PetCompliance[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'ALL' | PetCompliance['overallStatus']>('ALL');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!getToken()) { router.push('/login'); return; }
@@ -52,7 +54,10 @@ export default function CompliancePage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  const filtered = filter === 'ALL' ? data : data.filter(p => p.overallStatus === filter);
+  const q = search.trim().toLowerCase();
+  const filtered = data
+    .filter(p => filter === 'ALL' || p.overallStatus === filter)
+    .filter(p => !q || p.petName.toLowerCase().includes(q) || p.ownerName.toLowerCase().includes(q));
 
   const counts = {
     total: data.length,
@@ -69,7 +74,12 @@ export default function CompliancePage() {
           <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
           <h1 className="font-semibold">Vaccination Compliance Report</h1>
         </div>
-        <p className="text-xs text-neutral-400">Per spec §3 — updated in real time</p>
+        <div className="flex items-center gap-2">
+          <input
+            className="rounded-md border px-3 py-1.5 text-sm w-64 placeholder:text-neutral-400"
+            placeholder="Search by owner or pet name…"
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-8 space-y-6">
@@ -146,7 +156,7 @@ export default function CompliancePage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <a href={`/customers?highlight=${pet.petId}`}
+                      <a href={`/clients/${pet.customerId}`}
                         className="text-xs text-brand hover:underline">
                         View pet →
                       </a>

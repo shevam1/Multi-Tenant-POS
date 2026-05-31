@@ -83,12 +83,21 @@ export class VaccinationsService {
    * Per-spec §3: "compiles a comprehensive vaccination compliance report
    * highlighting which pets are out of date."
    */
-  async complianceReport(storeId?: string) {
-    // Get all pets accessible in the current tenant scope
+  async complianceReport(storeId?: string, q?: string) {
+    // Get all pets accessible in the current tenant scope, optionally filtered by
+    // owner name or pet name (search).
     const pets = await this.prisma.db.pet.findMany({
+      where: q
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' } },
+              { customer: { fullName: { contains: q, mode: 'insensitive' } } },
+            ],
+          }
+        : undefined,
       include: {
         vaccinations: { orderBy: { expiresAt: 'asc' } },
-        customer: { select: { fullName: true, phone: true } },
+        customer: { select: { id: true, fullName: true, phone: true } },
       },
     });
 
@@ -110,6 +119,7 @@ export class VaccinationsService {
 
       return {
         petId: pet.id,
+        customerId: pet.customer.id,
         petName: pet.name,
         breed: pet.breed,
         ownerName: pet.customer.fullName,
