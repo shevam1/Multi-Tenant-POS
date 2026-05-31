@@ -43,6 +43,13 @@ const SECTIONS: { group: string; items: SettingItem[] }[] = [
     ],
   },
   {
+    group: 'Communications',
+    items: [
+      { href: '/reminders/automation', title: 'Automation Settings', description: 'Automated message & email triggers', icon: '⚙️', perm: 'settings.manage' },
+      { href: '/settings/sms-auto-reply', title: 'SMS Auto-Reply', description: 'Instant reply to inbound texts', icon: '💬', perm: 'settings.manage' },
+    ],
+  },
+  {
     group: 'Forms & Compliance',
     items: [
       { href: '/forms', title: 'Forms', description: 'Intake & consent form builder', icon: '📝' },

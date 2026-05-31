@@ -1054,6 +1054,9 @@ model TenantSettings {
   allowDoubleBooking  Boolean @default(false)
   largeDogWeightKg    Float   @default(30)
   scheduleIntervalMin Int     @default(60)
+  // SMS auto-reply (spec §10)
+  smsAutoReplyEnabled Boolean @default(false)
+  smsAutoReplyMessage String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1081,6 +1084,17 @@ model StoreHours {
   @@unique([storeId, weekday])
   @@index([tenantId])
   @@map("store_hours")
+}
+
+/// Tracks outbound SMS auto-replies for the anti-loop guardrail (max 1/hour per number).
+model SmsAutoReplyLog {
+  id       String   @id @default(cuid())
+  tenantId String
+  phone    String
+  sentAt   DateTime @default(now())
+
+  @@index([tenantId, phone, sentAt])
+  @@map("sms_auto_reply_log")
 }
 
 /// Pet Options taxonomy (spec §9) — configurable dropdown lists that populate
