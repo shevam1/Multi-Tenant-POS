@@ -7,6 +7,7 @@ import { apiFetch, getToken } from '@/lib/api';
 interface Store { id: string; name: string }
 interface StaffUser {
   id: string; email: string; fullName: string; role: string;
+  phone: string | null; jobTitle: string | null;
   storeId: string | null; storeName: string | null; active: boolean;
   permissions: string[]; effectivePermissions: string[]; mustResetPassword: boolean;
 }
@@ -129,6 +130,8 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
 }) {
   const [fullName, setFullName] = useState(user?.fullName ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [phone, setPhone] = useState(user?.phone ?? '');
+  const [jobTitle, setJobTitle] = useState(user?.jobTitle ?? '');
   const [roles, setRoles] = useState<{ id: string; name: string; baseRole: string; permissions: string[] }[]>([]);
   const [roleId, setRoleId] = useState('');
   const [storeId, setStoreId] = useState(user?.storeId ?? (isHQ ? '' : myStoreId ?? ''));
@@ -171,10 +174,12 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
       if (mode === 'create') {
         await apiFetch('/staff', { method: 'POST', body: JSON.stringify({
           email, fullName, role, roleId, storeId: storeId || null, password, permissions: permsToSave,
+          phone: phone || null, jobTitle: jobTitle || null,
         })});
       } else if (user) {
         await apiFetch(`/staff/${user.id}`, { method: 'PATCH', body: JSON.stringify({
           fullName, role, roleId, storeId: storeId || null, active, permissions: permsToSave,
+          phone: phone || null, jobTitle: jobTitle || null,
         })});
       }
       onSaved();
@@ -211,6 +216,17 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
             <label className="block text-xs font-medium text-neutral-500 mb-1">Email {mode === 'create' && '*'}</label>
             <input className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-neutral-50" type="email"
               value={email} disabled={mode === 'edit'} onChange={e => setEmail(e.target.value)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1">Phone</label>
+              <input className="w-full rounded-lg border px-3 py-2 text-sm" value={phone} onChange={e => setPhone(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-500 mb-1">Job title</label>
+              <input className="w-full rounded-lg border px-3 py-2 text-sm" value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. Senior Groomer" />
+            </div>
           </div>
 
           {mode === 'create' && (

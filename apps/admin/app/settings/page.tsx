@@ -16,6 +16,12 @@ interface SettingItem {
 
 const SECTIONS: { group: string; items: SettingItem[] }[] = [
   {
+    group: 'My Account',
+    items: [
+      { href: '/settings/account', title: 'My Account', description: 'Your profile, contact info & password', icon: '👤' },
+    ],
+  },
+  {
     group: 'Business',
     items: [
       { href: '/settings/business', title: 'Business Settings', description: 'Info, localization, social & business hours', icon: '🏢', perm: 'settings.manage' },

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CurrentUser, Public } from './decorators';
 import { LoginDto } from './dto/login.dto';
@@ -18,5 +18,20 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user.userId);
+  }
+
+  /** Self-service profile update (any authenticated user, own record). */
+  @Patch('me')
+  updateProfile(@Body() dto: Record<string, unknown>, @CurrentUser() user: AuthUser) {
+    return this.auth.updateProfile(user.userId, dto);
+  }
+
+  /** Self-service password change (requires current password). */
+  @Post('me/password')
+  changePassword(
+    @Body() dto: { currentPassword: string; newPassword: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.auth.changePassword(user.userId, dto.currentPassword, dto.newPassword);
   }
 }

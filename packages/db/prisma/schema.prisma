@@ -259,6 +259,13 @@ model User {
   mustResetPassword Boolean @default(false)
   /// Commission rate (0..1) on attributed service revenue — for payroll/analytics.
   commissionRate Float   @default(0.4)
+  // ── Profile (self-service "My Account" + per-staff fields) ──
+  phone        String?
+  jobTitle     String?
+  bio          String?
+  avatarUrl    String?
+  notifyEmail  Boolean @default(true)
+  notifySms    Boolean @default(false)
   /// Optional custom role (Settings → Roles). When set, drives effective
   /// permissions + login control; `role` (enum) is kept in sync as the RBAC base.
   roleId       String?

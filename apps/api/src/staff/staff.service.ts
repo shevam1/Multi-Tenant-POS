@@ -13,6 +13,8 @@ export interface CreateStaffDto {
   storeId?: string | null;
   password: string;
   permissions?: string[];
+  phone?: string | null;
+  jobTitle?: string | null;
 }
 
 export interface UpdateStaffDto {
@@ -22,6 +24,8 @@ export interface UpdateStaffDto {
   storeId?: string | null;
   active?: boolean;
   permissions?: string[];
+  phone?: string | null;
+  jobTitle?: string | null;
 }
 
 @Injectable()
@@ -51,6 +55,8 @@ export class StaffService {
       email: u.email,
       fullName: u.fullName,
       role: u.role,
+      phone: u.phone,
+      jobTitle: u.jobTitle,
       storeId: u.storeId,
       storeName: u.store?.name ?? null,
       active: u.active,
@@ -86,6 +92,8 @@ export class StaffService {
         storeId: dto.storeId ?? null,
         passwordHash,
         permissions: dto.permissions ?? [],
+        phone: dto.phone ?? null,
+        jobTitle: dto.jobTitle ?? null,
         mustResetPassword: true,
       },
     });
@@ -107,6 +115,8 @@ export class StaffService {
         ...(dto.storeId !== undefined && { storeId: dto.storeId }),
         ...(dto.active !== undefined && { active: dto.active }),
         ...(dto.permissions !== undefined && { permissions: dto.permissions }),
+        ...(dto.phone !== undefined && { phone: dto.phone }),
+        ...(dto.jobTitle !== undefined && { jobTitle: dto.jobTitle }),
       },
     });
     await this.audit.log({ action: 'STAFF_UPDATE', entityType: 'user', entityId: id });
@@ -132,10 +142,11 @@ export class StaffService {
     return this.publicShape(user);
   }
 
-  private publicShape(u: { id: string; email: string; fullName: string; role: UserRole; storeId: string | null; active: boolean; permissions: string[] }) {
+  private publicShape(u: { id: string; email: string; fullName: string; role: UserRole; storeId: string | null; active: boolean; permissions: string[]; phone?: string | null; jobTitle?: string | null }) {
     return {
       id: u.id, email: u.email, fullName: u.fullName, role: u.role,
       storeId: u.storeId, active: u.active, permissions: u.permissions,
+      phone: u.phone ?? null, jobTitle: u.jobTitle ?? null,
     };
   }
 }
