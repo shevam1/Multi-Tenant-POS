@@ -48,7 +48,7 @@ export class PosService {
     const province = booking.store.province as Province;
 
     // Resolve retail product sales → line items (authoritative price) + stock deduction later.
-    const productLines: { description: string; amountCents: number; taxable: boolean }[] = [];
+    const productLines: { description: string; amountCents: number; taxable: boolean; isRetail: boolean }[] = [];
     if (dto.productSales?.length) {
       const ids = dto.productSales.map(p => p.productId);
       const products = await this.prisma.db.product.findMany({ where: { id: { in: ids } } });
@@ -56,7 +56,7 @@ export class PosService {
         const p = products.find(x => x.id === sale.productId);
         if (!p) continue;
         if (p.stockQty < sale.qty) throw new BadRequestException(`Insufficient stock for ${p.name}`);
-        productLines.push({ description: `${p.name}${sale.qty > 1 ? ` ×${sale.qty}` : ''} (retail)`, amountCents: p.priceCents * sale.qty, taxable: true });
+        productLines.push({ description: `${p.name}${sale.qty > 1 ? ` ×${sale.qty}` : ''} (retail)`, amountCents: p.priceCents * sale.qty, taxable: true, isRetail: true });
       }
     }
 
@@ -132,6 +132,7 @@ export class PosService {
             description: l.description,
             amountCents: l.amountCents,
             taxable: l.taxable ?? true,
+            isRetail: (l as { isRetail?: boolean }).isRetail ?? false,
           })),
         },
         taxLines: {

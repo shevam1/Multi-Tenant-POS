@@ -27,6 +27,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ProductsModule } from './products/products.module';
+import { FinanceModule } from './finance/finance.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { ProductsModule } from './products/products.module';
     CouponsModule,
     MessagingModule,
     ProductsModule,
+    FinanceModule,
   ],
   controllers: [HealthController],
   providers: [

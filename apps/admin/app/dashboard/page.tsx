@@ -169,6 +169,11 @@ export default function DashboardPage() {
           <a href="/analytics" className="rounded-md bg-indigo-100 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-200">
             HQ Analytics
           </a>
+          {user?.permissions?.includes('analytics.view') && (
+            <a href="/sales-expense" className="rounded-md bg-green-100 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-200">
+              Sales &amp; Expense
+            </a>
+          )}
           <a href="/memberships" className="rounded-md bg-violet-100 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-200">
             Memberships
           </a>
