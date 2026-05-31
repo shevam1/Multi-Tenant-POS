@@ -1,8 +1,9 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import type { AutomationType, MessageChannel } from '@omnipos/db';
+import type { AutomationType } from '@omnipos/db';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
-import { RemindersService } from './reminders.service';
+import { RemindersService, type SaveRuleDto } from './reminders.service';
+import { MERGE_TAGS } from './automation.meta';
 
 @Roles('RECEPTION', 'STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'CALL_CENTER_AGENT')
 @Controller('reminders')
@@ -21,6 +22,12 @@ export class RemindersController {
 
   // ── Automation rules ──────────────────────────────────────────────────────
 
+  /** Merge-tag palette (the %token% data contract) for the template editor. */
+  @Get('automation/meta')
+  meta() {
+    return { mergeTags: MERGE_TAGS };
+  }
+
   @Get('automation')
   rules(@CurrentUser() user: AuthUser) {
     return this.reminders.listRules(user.tenantId);
@@ -28,10 +35,7 @@ export class RemindersController {
 
   @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
   @Post('automation')
-  saveRule(
-    @Body() dto: { type: AutomationType; channel: MessageChannel; enabled: boolean; offsetHours: number; template: string },
-    @CurrentUser() user: AuthUser,
-  ) {
+  saveRule(@Body() dto: SaveRuleDto, @CurrentUser() user: AuthUser) {
     return this.reminders.saveRule(user.tenantId, dto);
   }
 }

@@ -52,12 +52,27 @@ enum ThreadStatus {
 
 /// Reminder/automation categories (spec §10 CRM).
 enum AutomationType {
+  NEW_APPOINTMENT
+  RESCHEDULED_APPOINTMENT
+  CANCELLED_APPOINTMENT
   APPOINTMENT_REMINDER
   SECONDARY_REMINDER
   SAME_DAY_REMINDER
-  REBOOK_REMINDER
+  BEFORE_APPT_REMINDER
+  WAITING_LIST
+  FORM_ACCEPTANCE
+  FORM_REJECTION
   VACCINATION_REMINDER
+  REBOOK_REMINDER
   PET_BIRTHDAY_REMINDER
+  SEND_AGREEMENT
+  REQUEST_DEPOSIT
+  SEND_INVOICE
+  COLLECT_CARD
+  PICKUP_REMINDER
+  ETA_MESSAGE
+  OPPORTUNITY_FOLLOWUP
+  ARRIVAL_WINDOW
 }
 
 /// CRM lifecycle status for a customer record.
@@ -1195,11 +1210,19 @@ model AutomationRule {
   tenantId    String
   type        AutomationType
   channel     MessageChannel @default(SMS)
+  /// Delivery medium: BOTH | SMS | EMAIL ("Send auto message by").
+  deliveryMode String        @default("SMS")
   enabled     Boolean        @default(true)
   /// Hours before (reminders) or after (rebook) the trigger event.
   offsetHours Int            @default(24)
-  /// Message template; supports {{petName}}, {{customerName}}, {{time}} tokens.
+  /// SMS / message body template; supports %merge_tag% (and legacy {{token}}).
   template    String
+  /// Email subject line template (merge tags supported).
+  subject     String?
+  /// Email branding accent color (hex).
+  brandColor  String?
+  /// Admin emails CC'd on outgoing client messages (notification routing).
+  ccEmails    String[]       @default([])
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
