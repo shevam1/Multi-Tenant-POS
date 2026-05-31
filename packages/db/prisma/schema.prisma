@@ -26,6 +26,40 @@ enum CouponType {
   FIXED
 }
 
+enum MessageChannel {
+  SMS
+  EMAIL
+  SYSTEM
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  SCHEDULED
+  SENT
+  DELIVERED
+  FAILED
+  READ
+}
+
+enum ThreadStatus {
+  OPEN
+  CLOSED
+}
+
+/// Reminder/automation categories (spec §10 CRM).
+enum AutomationType {
+  APPOINTMENT_REMINDER
+  SECONDARY_REMINDER
+  SAME_DAY_REMINDER
+  REBOOK_REMINDER
+  VACCINATION_REMINDER
+  PET_BIRTHDAY_REMINDER
+}
+
 /// CRM lifecycle status for a customer record.
 enum CustomerStatus {
   ACTIVE
@@ -162,6 +196,8 @@ model Tenant {
   customerNotes    CustomerNote[]
   catalogItemStores CatalogItemStore[]
   coupons          Coupon[]
+  messageThreads   MessageThread[]
+  automationRules  AutomationRule[]
 
   @@map("tenant")
 }
@@ -291,6 +327,7 @@ model Customer {
   memberships         Membership[]
   loyaltyTransactions LoyaltyTransaction[]
   notes               CustomerNote[]
+  messageThreads      MessageThread[]
 
   @@index([tenantId])
   @@index([tenantId, phone])
@@ -847,6 +884,86 @@ model CustomerNote {
   @@index([tenantId])
   @@index([customerId])
   @@map("customer_note")
+}
+
+// ── Messaging (2-way SMS/Email) + automation (spec §10) ──────────────────────
+
+/// A conversation thread with a customer (one per customer per tenant).
+model MessageThread {
+  id                 String       @id @default(cuid())
+  tenantId           String
+  customerId         String
+  status             ThreadStatus @default(OPEN)
+  unread             Boolean      @default(false)
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([tenantId, customerId])
+  @@index([tenantId])
+  @@map("message_thread")
+}
+
+model Message {
+  id           String           @id @default(cuid())
+  tenantId     String
+  threadId     String
+  channel      MessageChannel
+  direction    MessageDirection
+  body         String
+  /// Image data URLs or shared links.
+  attachments  String[]         @default([])
+  status       MessageStatus    @default(SENT)
+  scheduledFor DateTime?
+  sentByUserId String?
+  createdAt    DateTime         @default(now())
+
+  thread MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([threadId, createdAt])
+  @@map("message")
+}
+
+/// Automated message/email rule for reminders (spec §10).
+model AutomationRule {
+  id          String         @id @default(cuid())
+  tenantId    String
+  type        AutomationType
+  channel     MessageChannel @default(SMS)
+  enabled     Boolean        @default(true)
+  /// Hours before (reminders) or after (rebook) the trigger event.
+  offsetHours Int            @default(24)
+  /// Message template; supports {{petName}}, {{customerName}}, {{time}} tokens.
+  template    String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, type])
+  @@index([tenantId])
+  @@map("automation_rule")
+}
+
+/// Log of reminders dispatched for a booking (drives the Reminders table).
+model ReminderLog {
+  id        String         @id @default(cuid())
+  tenantId  String
+  bookingId String
+  type      AutomationType
+  channel   MessageChannel
+  status    String         @default("SENT")
+  sentAt    DateTime       @default(now())
+
+  @@unique([bookingId, type])
+  @@index([tenantId])
+  @@map("reminder_log")
 }
 
 // ── Membership & loyalty (spec §11) ──────────────────────────────────────────

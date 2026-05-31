@@ -145,6 +145,12 @@ export default function DashboardPage() {
           <a href="/clients" className="rounded-md bg-orange-100 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-200">
             Clients
           </a>
+          <a href="/messages" className="rounded-md bg-lime-100 px-3 py-1.5 text-xs font-medium text-lime-700 hover:bg-lime-200">
+            Messages
+          </a>
+          <a href="/reminders" className="rounded-md bg-yellow-100 px-3 py-1.5 text-xs font-medium text-yellow-700 hover:bg-yellow-200">
+            Reminders
+          </a>
           {user?.permissions?.includes('packages.manage') && (
             <a href="/packages" className="rounded-md bg-cyan-100 px-3 py-1.5 text-xs font-medium text-cyan-700 hover:bg-cyan-200">
               Packages

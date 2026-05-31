@@ -50,7 +50,11 @@ BEGIN
       ('coupon',                 'tenantId'),
       ('booking_groomer',        'tenantId'),
       ('booking_pet',            'tenantId'),
-      ('booking_photo',          'tenantId')
+      ('booking_photo',          'tenantId'),
+      ('message_thread',         'tenantId'),
+      ('message',                'tenantId'),
+      ('automation_rule',        'tenantId'),
+      ('reminder_log',           'tenantId')
     ) AS v(table_name, tenant_col)
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t.table_name);

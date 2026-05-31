@@ -3,6 +3,7 @@ import { Public } from '../auth/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { FormsService } from './forms.service';
+import { MessagesService } from '../messaging/messages.service';
 
 /**
  * Public pre-visit signing flow (spec §6). The client opens a link
@@ -15,6 +16,7 @@ export class PublicFormsController {
     private readonly prisma: PrismaService,
     private readonly forms: FormsService,
     private readonly realtime: RealtimeGateway,
+    private readonly messages: MessagesService,
   ) {}
 
   /** Booking summary + forms to sign + which are already signed. */
@@ -95,6 +97,10 @@ export class PublicFormsController {
 
     // Notify admin in real time that a form was signed
     this.realtime.emitBookingStatusChange(booking.storeId, { bookingId, formSigned: formType });
+
+    // Post a [System] message into the customer's thread so staff see the signature land
+    await this.messages.postSystem(booking.customerId, '[System] Client has signed the agreement.', booking.tenantId)
+      .catch(() => null);
 
     return { ok: true, signedAt: submission.signedAt };
   }

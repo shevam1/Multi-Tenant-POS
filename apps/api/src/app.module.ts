@@ -25,6 +25,7 @@ import { StripeModule } from './stripe/stripe.module';
 import { StaffModule } from './staff/staff.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CouponsModule } from './coupons/coupons.module';
+import { MessagingModule } from './messaging/messaging.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { CouponsModule } from './coupons/coupons.module';
     StaffModule,
     CatalogModule,
     CouponsModule,
+    MessagingModule,
   ],
   controllers: [HealthController],
   providers: [
