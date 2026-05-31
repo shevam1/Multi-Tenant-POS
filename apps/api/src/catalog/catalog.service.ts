@@ -13,6 +13,19 @@ export interface SaveCatalogItemDto {
   categoryId?: string | null;
   taxable?: boolean;
   bookOnline?: boolean;
+  species?: string[];
+  hairLengths?: string[];
+  breeds?: string[];
+  minWeightKg?: number | null;
+  maxWeightKg?: number | null;
+}
+
+/** Pet attributes used to filter eligible services on the public booking site. */
+export interface PetFilter {
+  species?: string;
+  hairLength?: string;
+  breed?: string;
+  weightKg?: number;
 }
 
 export interface StoreOverrideDto {
@@ -49,6 +62,11 @@ export class CatalogService {
         categoryId: dto.categoryId ?? null,
         taxable: dto.taxable ?? true,
         bookOnline: dto.bookOnline ?? true,
+        species: dto.species ?? [],
+        hairLengths: dto.hairLengths ?? [],
+        breeds: dto.breeds ?? [],
+        minWeightKg: dto.minWeightKg ?? null,
+        maxWeightKg: dto.maxWeightKg ?? null,
       },
     });
     await this.audit.log({ action: 'CATALOG_CREATE', entityType: 'catalog_item', entityId: item.id });
@@ -68,6 +86,11 @@ export class CatalogService {
         ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
         ...(dto.taxable !== undefined && { taxable: dto.taxable }),
         ...(dto.bookOnline !== undefined && { bookOnline: dto.bookOnline }),
+        ...(dto.species !== undefined && { species: dto.species }),
+        ...(dto.hairLengths !== undefined && { hairLengths: dto.hairLengths }),
+        ...(dto.breeds !== undefined && { breeds: dto.breeds }),
+        ...(dto.minWeightKg !== undefined && { minWeightKg: dto.minWeightKg }),
+        ...(dto.maxWeightKg !== undefined && { maxWeightKg: dto.maxWeightKg }),
       },
     });
     await this.audit.log({ action: 'CATALOG_UPDATE', entityType: 'catalog_item', entityId: id });
@@ -88,6 +111,8 @@ export class CatalogService {
         tenantId, kind: src.kind, name: `${src.name} (copy)`, description: src.description,
         basePriceCents: src.basePriceCents, durationMin: src.durationMin, active: src.active,
         categoryId: src.categoryId, taxable: src.taxable, bookOnline: src.bookOnline,
+        species: src.species, hairLengths: src.hairLengths, breeds: src.breeds,
+        minWeightKg: src.minWeightKg, maxWeightKg: src.maxWeightKg,
         attributes: src.attributes as object,
       },
     });
@@ -160,7 +185,7 @@ export class CatalogService {
    * Used by the public booking site. An item with NO override row for the store
    * is available everywhere at base price; an override can hide it or reprice it.
    */
-  async catalogForStore(tenantId: string, storeId: string) {
+  async catalogForStore(tenantId: string, storeId: string, pet?: PetFilter) {
     const items = await this.prisma.forTenant(tenantId).catalogItem.findMany({
       where: { active: true, bookOnline: true },   // only online-visible services
       include: { storeOverrides: { where: { storeId } } },
@@ -168,6 +193,7 @@ export class CatalogService {
     });
 
     return items
+      .filter(item => CatalogService.eligibleForPet(item, pet))
       .map(item => {
         const ov = item.storeOverrides[0];
         return {
@@ -178,8 +204,33 @@ export class CatalogService {
           durationMin: item.durationMin,
           priceCents: ov?.priceCents ?? item.basePriceCents,
           available: ov ? ov.available : true,
+          // Eligibility fields so the multi-pet booking UI can filter per pet.
+          species: item.species,
+          hairLengths: item.hairLengths,
+          breeds: item.breeds,
+          minWeightKg: item.minWeightKg,
+          maxWeightKg: item.maxWeightKg,
         };
       })
       .filter(i => i.available);
+  }
+
+  /**
+   * Service-eligibility match: an empty filter array means "applies to all".
+   * Returns true when no pet is supplied (unfiltered browse).
+   */
+  static eligibleForPet(
+    item: { species: string[]; hairLengths: string[]; breeds: string[]; minWeightKg: number | null; maxWeightKg: number | null },
+    pet?: PetFilter,
+  ): boolean {
+    if (!pet) return true;
+    if (item.species.length && pet.species && !item.species.includes(pet.species)) return false;
+    if (item.hairLengths.length && pet.hairLength && !item.hairLengths.includes(pet.hairLength)) return false;
+    if (item.breeds.length && pet.breed && !item.breeds.includes(pet.breed)) return false;
+    if (pet.weightKg != null) {
+      if (item.minWeightKg != null && pet.weightKg < item.minWeightKg) return false;
+      if (item.maxWeightKg != null && pet.weightKg > item.maxWeightKg) return false;
+    }
+    return true;
   }
 }

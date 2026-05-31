@@ -11,9 +11,14 @@ interface CatalogItem {
   id: string; kind: 'PACKAGE' | 'ADDON' | 'RETAIL'; name: string; description: string | null;
   basePriceCents: number; durationMin: number | null; active: boolean;
   categoryId: string | null; taxable: boolean; bookOnline: boolean;
+  species: string[]; hairLengths: string[]; breeds: string[];
+  minWeightKg: number | null; maxWeightKg: number | null;
   category: { id: string; name: string } | null;
   storeOverrides: StoreOverride[];
 }
+
+const SPECIES = ['DOG', 'CAT'];
+const HAIR_LENGTHS = ['SHORT', 'MEDIUM', 'LONG'];
 interface AuthMe { role: string; permissions: string[] }
 
 const KIND_BADGE: Record<string, string> = {
@@ -141,6 +146,14 @@ export default function PackagesPage() {
                           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${KIND_BADGE[item.kind]}`}>{item.kind}</span>
                           {!item.bookOnline && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">offline</span>}
                           {!item.taxable && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">tax-free</span>}
+                          {(item.species.length > 0 || item.hairLengths.length > 0 || item.breeds.length > 0 || item.minWeightKg != null || item.maxWeightKg != null) && (
+                            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-600" title={[
+                              item.species.length ? `Species: ${item.species.join('/')}` : '',
+                              item.hairLengths.length ? `Coat: ${item.hairLengths.join('/')}` : '',
+                              item.breeds.length ? `Breeds: ${item.breeds.join(', ')}` : '',
+                              (item.minWeightKg != null || item.maxWeightKg != null) ? `Weight: ${item.minWeightKg ?? 0}–${item.maxWeightKg ?? '∞'}kg` : '',
+                            ].filter(Boolean).join(' · ')}>filtered</span>
+                          )}
                         </div>
                         {item.description && <p className="mt-0.5 text-xs text-neutral-500">{item.description}</p>}
                         <p className="mt-1 text-sm">
@@ -207,7 +220,15 @@ function ItemModal({ item, categories, defaultCategoryId, onClose, onSaved }: {
   const [categoryId, setCategoryId] = useState<string>(item?.categoryId ?? defaultCategoryId ?? '');
   const [taxable, setTaxable] = useState(item?.taxable ?? true);
   const [bookOnline, setBookOnline] = useState(item?.bookOnline ?? true);
+  const [species, setSpecies] = useState<string[]>(item?.species ?? []);
+  const [hairLengths, setHairLengths] = useState<string[]>(item?.hairLengths ?? []);
+  const [breeds, setBreeds] = useState(item?.breeds?.join(', ') ?? '');
+  const [minWeight, setMinWeight] = useState(item?.minWeightKg != null ? String(item.minWeightKg) : '');
+  const [maxWeight, setMaxWeight] = useState(item?.maxWeightKg != null ? String(item.maxWeightKg) : '');
   const [saving, setSaving] = useState(false);
+
+  const toggleIn = (arr: string[], set: (v: string[]) => void, val: string) =>
+    set(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]);
 
   async function save() {
     if (!name.trim() || !price) return;
@@ -217,6 +238,10 @@ function ItemModal({ item, categories, defaultCategoryId, onClose, onSaved }: {
       basePriceCents: Math.round(parseFloat(price) * 100),
       durationMin: duration ? parseInt(duration) : null,
       categoryId: categoryId || null, taxable, bookOnline,
+      species, hairLengths,
+      breeds: breeds.split(',').map(b => b.trim()).filter(Boolean),
+      minWeightKg: minWeight ? parseFloat(minWeight) : null,
+      maxWeightKg: maxWeight ? parseFloat(maxWeight) : null,
     });
     if (editing) await apiFetch(`/catalog/${item.id}`, { method: 'PATCH', body });
     else await apiFetch('/catalog', { method: 'POST', body });
@@ -265,6 +290,43 @@ function ItemModal({ item, categories, defaultCategoryId, onClose, onSaved }: {
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={bookOnline} onChange={e => setBookOnline(e.target.checked)} /> Available for online booking</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={taxable} onChange={e => setTaxable(e.target.checked)} /> Taxable</label>
         </div>
+
+        <div className="rounded-xl border p-3 space-y-3">
+          <p className="text-xs font-semibold uppercase text-neutral-400">Service eligibility <span className="font-normal normal-case text-neutral-400">(leave blank = applies to all pets)</span></p>
+          <div>
+            <label className="block text-xs text-neutral-500 mb-1">Species</label>
+            <div className="flex gap-2">
+              {SPECIES.map(sp => (
+                <button key={sp} type="button" onClick={() => toggleIn(species, setSpecies, sp)}
+                  className={`rounded-full border px-3 py-1 text-xs ${species.includes(sp) ? 'bg-brand text-white border-brand' : 'hover:bg-neutral-50'}`}>{sp}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-neutral-500 mb-1">Coat length</label>
+            <div className="flex gap-2">
+              {HAIR_LENGTHS.map(h => (
+                <button key={h} type="button" onClick={() => toggleIn(hairLengths, setHairLengths, h)}
+                  className={`rounded-full border px-3 py-1 text-xs ${hairLengths.includes(h) ? 'bg-brand text-white border-brand' : 'hover:bg-neutral-50'}`}>{h}</button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-neutral-500 mb-1">Weight range (kg)</label>
+              <div className="flex items-center gap-1">
+                <input type="number" step="0.1" placeholder="min" className="w-full rounded-lg border px-2 py-2 text-sm" value={minWeight} onChange={e => setMinWeight(e.target.value)} />
+                <span className="text-neutral-400">–</span>
+                <input type="number" step="0.1" placeholder="max" className="w-full rounded-lg border px-2 py-2 text-sm" value={maxWeight} onChange={e => setMaxWeight(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-neutral-500 mb-1">Breeds (comma-separated)</label>
+              <input className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="any" value={breeds} onChange={e => setBreeds(e.target.value)} />
+            </div>
+          </div>
+        </div>
+
         <div className="flex gap-2">
           <button onClick={save} disabled={saving || !name || !price} className="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-white disabled:opacity-50">
             {saving ? 'Saving…' : editing ? 'Save' : 'Create'}

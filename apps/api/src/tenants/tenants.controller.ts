@@ -28,13 +28,24 @@ export class TenantsController {
 
   @Public()
   @Get('tenant/:slug/catalog')
-  async getCatalog(@Param('slug') slug: string, @Query('storeId') storeId?: string) {
+  async getCatalog(
+    @Param('slug') slug: string,
+    @Query('storeId') storeId?: string,
+    @Query('species') species?: string,
+    @Query('hairLength') hairLength?: string,
+    @Query('breed') breed?: string,
+    @Query('weightKg') weightKg?: string,
+  ) {
     const tenant = await this.prisma.asSystem(tx => tx.tenant.findUnique({ where: { slug } }));
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    // Location-aware catalog: items available at the store, priced per location.
+    // Location-aware catalog: items available at the store, priced per location,
+    // optionally filtered to services eligible for the selected pet.
     if (storeId) {
-      return this.catalog.catalogForStore(tenant.id, storeId);
+      const pet = (species || hairLength || breed || weightKg)
+        ? { species, hairLength, breed, weightKg: weightKg ? Number(weightKg) : undefined }
+        : undefined;
+      return this.catalog.catalogForStore(tenant.id, storeId, pet);
     }
 
     // No store specified — return all active items at base price (backward compat).

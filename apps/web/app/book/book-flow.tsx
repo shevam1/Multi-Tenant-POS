@@ -19,6 +19,23 @@ interface CatalogItem {
   description: string | null;
   priceCents: number;
   durationMin: number | null;
+  species?: string[];
+  hairLengths?: string[];
+  breeds?: string[];
+  minWeightKg?: number | null;
+  maxWeightKg?: number | null;
+}
+
+/** Service eligibility for a pet (empty filter = applies to all). */
+function eligibleForPet(item: CatalogItem, pet: PetEntry): boolean {
+  const breed = pet.breed.trim();
+  const weight = pet.weight ? Number(pet.weight) : NaN;
+  if (item.breeds?.length && breed && !item.breeds.includes(breed)) return false;
+  if (!Number.isNaN(weight)) {
+    if (item.minWeightKg != null && weight < item.minWeightKg) return false;
+    if (item.maxWeightKg != null && weight > item.maxWeightKg) return false;
+  }
+  return true;
 }
 
 type Step = 'returning' | 'new-customer' | 'pet' | 'service' | 'schedule' | 'confirm' | 'done';
@@ -212,10 +229,12 @@ export default function BookFlow() {
             <h2 className="text-xl font-bold">Choose services</h2>
             {form.pets.filter(p => p.name).map((pet, i) => {
               const petIdx = form.pets.findIndex(p => p === pet);
+              const eligible = packages.filter(item => eligibleForPet(item, pet));
               return (
                 <div key={petIdx} className="space-y-3">
                   <p className="text-sm font-semibold">{pet.name}{pet.breed ? ` · ${pet.breed}` : ''}</p>
-                  {packages.map(item => {
+                  {eligible.length === 0 && <p className="text-xs text-neutral-400">No services match this pet&apos;s size or breed — please call us to book.</p>}
+                  {eligible.map(item => {
                     const selected = pet.selectedItems.includes(item.id);
                     return (
                       <label key={item.id}
