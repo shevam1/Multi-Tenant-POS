@@ -198,6 +198,9 @@ model Tenant {
   coupons          Coupon[]
   messageThreads   MessageThread[]
   automationRules  AutomationRule[]
+  suppliers        Supplier[]
+  productCategories ProductCategory[]
+  products         Product[]
 
   @@map("tenant")
 }
@@ -224,6 +227,7 @@ model Store {
   timeclockEntries TimeclockEntry[]
   leaveRequests    LeaveRequest[]
   catalogOverrides CatalogItemStore[]
+  products         Product[]
 
   @@index([tenantId])
   @@map("store")
@@ -864,6 +868,67 @@ model Coupon {
   @@unique([tenantId, code])
   @@index([tenantId])
   @@map("coupon")
+}
+
+// ── Product store (retail inventory) ─────────────────────────────────────────
+
+model Supplier {
+  id          String    @id @default(cuid())
+  tenantId    String
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([tenantId])
+  @@map("supplier")
+}
+
+model ProductCategory {
+  id        String    @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime  @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("product_category")
+}
+
+/// A sellable retail product with stock tracking (store-scoped).
+model Product {
+  id           String   @id @default(cuid())
+  tenantId     String
+  storeId      String
+  name         String
+  sku          String?
+  barcode      String?
+  categoryId   String?
+  supplierId   String?
+  priceCents   Int
+  costCents    Int      @default(0)
+  stockQty     Int      @default(0)
+  reorderLevel Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store    Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, storeId])
+  @@map("product")
 }
 
 // ── Customer notes ───────────────────────────────────────────────────────────

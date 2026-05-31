@@ -3,9 +3,10 @@ import { PosController } from './pos.controller';
 import { PosService } from './pos.service';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { CouponsModule } from '../coupons/coupons.module';
+import { ProductsModule } from '../products/products.module';
 
 @Module({
-  imports: [MembershipsModule, CouponsModule],
+  imports: [MembershipsModule, CouponsModule, ProductsModule],
   controllers: [PosController],
   providers: [PosService],
   exports: [PosService],

@@ -156,6 +156,11 @@ export default function DashboardPage() {
               Packages
             </a>
           )}
+          {user?.permissions?.includes('inventory.manage') && (
+            <a href="/products" className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-200">
+              Product Store
+            </a>
+          )}
           {user?.permissions?.includes('coupons.manage') && (
             <a href="/coupons" className="rounded-md bg-rose-100 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-200">
               Coupons

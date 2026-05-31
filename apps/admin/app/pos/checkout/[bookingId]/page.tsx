@@ -7,11 +7,14 @@ import { apiFetch, getToken } from '@/lib/api';
 interface BookingInfo {
   id: string;
   status: string;
+  storeId: string;
   customer: { id: string; fullName: string; statementCreditCents: number };
   pet: { name: string } | null;
   store: { province: string; name: string };
   lineItems: { description: string; unitPriceCents: number }[];
 }
+
+interface SellableProduct { id: string; name: string; priceCents: number; stockQty: number; sku: string | null }
 
 interface MemberInfo {
   tier: string;
@@ -50,12 +53,15 @@ export default function CheckoutPage() {
   const [couponInput, setCouponInput] = useState('');
   const [coupon, setCoupon] = useState<{ code: string; discountCents: number } | null>(null);
   const [couponError, setCouponError] = useState('');
+  const [sellable, setSellable] = useState<SellableProduct[]>([]);
+  const [cart, setCart] = useState<Record<string, number>>({}); // productId → qty
 
   useEffect(() => {
     if (!getToken()) { router.push('/login'); return; }
     apiFetch<BookingInfo & { store: { province: string } }>(`/bookings/${bookingId}`)
       .then(async b => {
         setBooking(b);
+        if (b.storeId) apiFetch<SellableProduct[]>(`/products/sellable?storeId=${b.storeId}`).then(setSellable).catch(() => {});
         const serviceSubtotal = b.lineItems.reduce((s, l) => s + l.unitPriceCents, 0);
         const m = await apiFetch<{ plan: MemberInfo } | null>(`/memberships/customer/${b.customer.id}`).catch(() => null);
         if (m && (m as unknown as { plan?: { tier: string; name: string; serviceDiscountPct: number; pointsMultiplier: number; benefits: string[] } }).plan) {
@@ -72,9 +78,14 @@ export default function CheckoutPage() {
       .finally(() => setLoading(false));
   }, [bookingId, router]);
 
+  const productLines = Object.entries(cart).filter(([, q]) => q > 0).map(([pid, qty]) => {
+    const p = sellable.find(s => s.id === pid)!;
+    return { description: `${p.name}${qty > 1 ? ` ×${qty}` : ''} (retail)`, amountCents: p.priceCents * qty };
+  });
+
   useEffect(() => {
     if (!booking) return;
-    const lines = booking.lineItems.map(l => ({ description: l.description, amountCents: l.unitPriceCents }));
+    const lines = [...booking.lineItems.map(l => ({ description: l.description, amountCents: l.unitPriceCents })), ...productLines];
     if (lines.length === 0) { setPreview(null); return; }
     const credit = useCredit ? booking.customer.statementCreditCents : 0;
     const discountCents = credit + (coupon?.discountCents ?? 0);
@@ -82,7 +93,8 @@ export default function CheckoutPage() {
       method: 'POST',
       body: JSON.stringify({ lines, tender, discountCents, tipCents }),
     }).then(setPreview).catch(() => null);
-  }, [booking, tender, useCredit, tipCents, coupon]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking, tender, useCredit, tipCents, coupon, cart]);
 
   async function applyCoupon() {
     if (!booking || !couponInput.trim()) return;
@@ -104,12 +116,14 @@ export default function CheckoutPage() {
     setPaying(true);
     try {
       const lines = booking.lineItems.map(l => ({ description: l.description, amountCents: l.unitPriceCents }));
+      const productSales = Object.entries(cart).filter(([, q]) => q > 0).map(([productId, qty]) => ({ productId, qty }));
       const res = await apiFetch<{ loyalty?: { earned: number } }>(`/pos/bookings/${bookingId}/checkout`, {
         method: 'POST',
         body: JSON.stringify({
           lines, tender, tipCents,
           discountCents: useCredit ? booking.customer.statementCreditCents : 0,
           couponCode: coupon?.code,
+          productSales,
         }),
       });
       setEarned(res.loyalty?.earned ?? null);
@@ -177,8 +191,36 @@ export default function CheckoutPage() {
               </div>
             ))}
             {booking.lineItems.length === 0 && <p className="py-2 text-neutral-400">No services on booking</p>}
+            {productLines.map(pl => (
+              <div key={pl.description} className="flex justify-between py-2 text-neutral-600">
+                <span>🛍 {pl.description}</span>
+                <span>{fmt(pl.amountCents)}</span>
+              </div>
+            ))}
           </div>
         </div>
+
+        {/* Retail products */}
+        {sellable.length > 0 && (
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="mb-3 font-semibold text-sm">Add retail products</p>
+            <div className="space-y-2">
+              {sellable.map(p => {
+                const qty = cart[p.id] ?? 0;
+                return (
+                  <div key={p.id} className="flex items-center justify-between text-sm">
+                    <span>{p.name} <span className="text-neutral-400">{fmt(p.priceCents)} · {p.stockQty} in stock</span></span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setCart(c => ({ ...c, [p.id]: Math.max(0, (c[p.id] ?? 0) - 1) }))} className="rounded border h-6 w-6 text-neutral-500 hover:bg-neutral-50">−</button>
+                      <span className="w-6 text-center">{qty}</span>
+                      <button onClick={() => setCart(c => ({ ...c, [p.id]: Math.min(p.stockQty, (c[p.id] ?? 0) + 1) }))} className="rounded border h-6 w-6 text-neutral-500 hover:bg-neutral-50">+</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Statement credit */}
         {booking.customer.statementCreditCents > 0 && (

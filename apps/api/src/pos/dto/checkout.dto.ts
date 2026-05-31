@@ -21,4 +21,6 @@ export class CheckoutDto {
   @IsOptional() @IsString() stripePaymentMethodId?: string;
   /** Optional coupon code applied to the service subtotal. */
   @IsOptional() @IsString() couponCode?: string;
+  /** Retail products sold on this bill — decrement stock + add as lines. */
+  @IsOptional() @IsArray() productSales?: { productId: string; qty: number }[];
 }

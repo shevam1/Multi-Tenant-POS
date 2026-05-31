@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MembershipsService } from '../memberships/memberships.service';
 import { StripeService } from '../stripe/stripe.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { ProductsService } from '../products/products.service';
 import type { CheckoutDto } from './dto/checkout.dto';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class PosService {
     private readonly memberships: MembershipsService,
     private readonly stripe: StripeService,
     private readonly coupons: CouponsService,
+    private readonly products: ProductsService,
   ) {}
 
   async getStore(storeId: string) {
@@ -45,8 +47,22 @@ export class PosService {
 
     const province = booking.store.province as Province;
 
-    // Member discount (spec §11): auto-apply tier discount on top of statement credit.
+    // Resolve retail product sales → line items (authoritative price) + stock deduction later.
+    const productLines: { description: string; amountCents: number; taxable: boolean }[] = [];
+    if (dto.productSales?.length) {
+      const ids = dto.productSales.map(p => p.productId);
+      const products = await this.prisma.db.product.findMany({ where: { id: { in: ids } } });
+      for (const sale of dto.productSales) {
+        const p = products.find(x => x.id === sale.productId);
+        if (!p) continue;
+        if (p.stockQty < sale.qty) throw new BadRequestException(`Insufficient stock for ${p.name}`);
+        productLines.push({ description: `${p.name}${sale.qty > 1 ? ` ×${sale.qty}` : ''} (retail)`, amountCents: p.priceCents * sale.qty, taxable: true });
+      }
+    }
+
+    // Member discount (spec §11): tier discount applies to SERVICES only (not retail).
     const serviceSubtotal = dto.lines.reduce((s, l) => s + l.amountCents, 0);
+    const allLines = [...dto.lines, ...productLines];
     const memberBenefits = await this.memberships.benefitsFor(booking.customerId, serviceSubtotal);
     const statementCreditRequested = dto.discountCents ?? 0;
 
@@ -69,7 +85,7 @@ export class PosService {
       tender: dto.tender as TenderType,
       discountCents: totalDiscount,
       tipCents: dto.tipCents ?? 0,
-      lines: dto.lines,
+      lines: allLines,
     });
 
     // Deduct statement credit
@@ -111,7 +127,7 @@ export class PosService {
         totalCents: result.totalCents,
         province,
         lines: {
-          create: dto.lines.map((l) => ({
+          create: allLines.map((l) => ({
             tenantId,
             description: l.description,
             amountCents: l.amountCents,
@@ -140,6 +156,9 @@ export class PosService {
 
     await this.prisma.db.booking.update({ where: { id: bookingId }, data: { status: 'COMPLETED' } });
     await this.deductInventory(booking.storeId, tenantId);
+
+    // Decrement retail product stock for items sold on this bill
+    if (dto.productSales?.length) await this.products.recordSale(dto.productSales);
 
     // Increment coupon redemption count after a successful checkout
     if (appliedCouponId) await this.coupons.redeem(appliedCouponId);

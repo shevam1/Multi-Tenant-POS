@@ -54,7 +54,10 @@ BEGIN
       ('message_thread',         'tenantId'),
       ('message',                'tenantId'),
       ('automation_rule',        'tenantId'),
-      ('reminder_log',           'tenantId')
+      ('reminder_log',           'tenantId'),
+      ('supplier',               'tenantId'),
+      ('product_category',       'tenantId'),
+      ('product',                'tenantId')
     ) AS v(table_name, tenant_col)
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t.table_name);

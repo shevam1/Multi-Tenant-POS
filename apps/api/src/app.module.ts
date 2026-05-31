@@ -26,6 +26,7 @@ import { StaffModule } from './staff/staff.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { MessagingModule } from './messaging/messaging.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { MessagingModule } from './messaging/messaging.module';
     CatalogModule,
     CouponsModule,
     MessagingModule,
+    ProductsModule,
   ],
   controllers: [HealthController],
   providers: [
