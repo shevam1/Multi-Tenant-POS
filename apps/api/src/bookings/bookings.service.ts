@@ -7,6 +7,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { VaccinationsService } from '../vaccinations/vaccinations.service';
 import { FormsService } from '../forms/forms.service';
 import { StripeService } from '../stripe/stripe.service';
+import { SettingsService } from '../settings/settings.service';
 import type { CreateBookingDto } from './dto/create-booking.dto';
 import type { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 
@@ -38,6 +39,7 @@ export class BookingsService {
     private readonly vaccinations: VaccinationsService,
     private readonly forms: FormsService,
     private readonly stripe: StripeService,
+    private readonly settings: SettingsService,
   ) {}
 
   async listForStore(storeId: string, date?: string) {
@@ -309,8 +311,9 @@ export class BookingsService {
       : booking.scheduledEnd;
     const groomerId = dto.assignedGroomerId !== undefined ? dto.assignedGroomerId : booking.assignedGroomerId;
 
-    // Overlap guard for the assigned groomer
-    if (groomerId && newEnd) {
+    // Overlap guard for the assigned groomer — unless double-booking is allowed (Settings)
+    const { allowDoubleBooking } = await this.settings.forEngine();
+    if (groomerId && newEnd && !allowDoubleBooking) {
       const clash = await this.prisma.db.booking.findFirst({
         where: {
           id: { not: id }, storeId: booking.storeId, assignedGroomerId: groomerId,
@@ -349,11 +352,6 @@ export class BookingsService {
 
   // ── Scheduling intelligence ──────────────────────────────────────────────
 
-  /** Default store operating window (used when no shifts are defined). */
-  private static readonly OPEN_H = 8;
-  private static readonly CLOSE_H = 19;
-  private static readonly SLOT_MIN = 60;
-
   /**
    * Available appointment slots for a store on a date.
    * A slot is available if at least one groomer is free:
@@ -366,6 +364,16 @@ export class BookingsService {
     const dayEnd = new Date(date + 'T23:59:59');
     // Public (web) callers pass tenantId explicitly (no JWT/CLS); admin uses db getter.
     const db = tenantId ? this.prisma.forTenant(tenantId) : this.prisma.db;
+
+    // Configured store hours for this weekday + booking interval setting.
+    const weekday = dayStart.getDay();
+    const [hours, engine] = await Promise.all([
+      this.settings.getHours(storeId, tenantId),
+      this.settings.forEngine(tenantId),
+    ]);
+    const dayHours = hours.find(h => h.weekday === weekday)!;
+    if (!dayHours.isOpen) return { date, closed: true, slots: [] };
+    const stepMin = engine.scheduleIntervalMin || 60;
 
     const [groomers, shifts, bookings] = await Promise.all([
       db.user.findMany({ where: { storeId, role: 'GROOMER', active: true }, select: { id: true } }),
@@ -382,10 +390,10 @@ export class BookingsService {
     const totalGroomers = Math.max(1, groomers.length);
     const slots: { time: string; available: boolean; capacity: number }[] = [];
 
-    for (let h = BookingsService.OPEN_H; h < BookingsService.CLOSE_H; h++) {
+    for (let m = dayHours.openMin; m < dayHours.closeMin; m += stepMin) {
       const slotStart = new Date(date + 'T00:00:00');
-      slotStart.setHours(h, 0, 0, 0);
-      const slotEnd = new Date(slotStart.getTime() + BookingsService.SLOT_MIN * 60000);
+      slotStart.setMinutes(slotStart.getMinutes() + m);
+      const slotEnd = new Date(slotStart.getTime() + stepMin * 60000);
 
       // Groomers on shift covering this slot (fallback: all groomers if no shifts that day)
       const onShift = shifts.length === 0

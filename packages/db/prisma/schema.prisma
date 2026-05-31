@@ -203,6 +203,8 @@ model Tenant {
   productCategories ProductCategory[]
   products         Product[]
   expenses         Expense[]
+  settings         TenantSettings?
+  storeHours       StoreHours[]
 
   @@map("tenant")
 }
@@ -231,6 +233,7 @@ model Store {
   catalogOverrides CatalogItemStore[]
   products         Product[]
   expenses         Expense[]
+  hours            StoreHours[]
 
   @@index([tenantId])
   @@map("store")
@@ -934,6 +937,63 @@ model Product {
 
   @@index([tenantId, storeId])
   @@map("product")
+}
+
+/// Per-tenant business settings & configuration (singleton per tenant).
+model TenantSettings {
+  id           String  @id @default(cuid())
+  tenantId     String  @unique
+  // Business info
+  businessName String?
+  logoUrl      String?
+  phone        String?
+  website      String?
+  addressLine  String?
+  businessType String  @default("SALON")
+  // Localization & operational preferences
+  currency     String  @default("CAD")
+  dateFormat   String  @default("MM/DD/YYYY")
+  weightUnit   String  @default("KG")
+  multiCouponMode String @default("SINGLE")
+  upcomingApptCount Int @default(3)
+  serviceFrequencyValue Int @default(1)
+  serviceFrequencyUnit  String @default("MONTHS")
+  // Social links
+  socialEmail    String?
+  socialFacebook String?
+  socialGoogle   String?
+  socialYelp     String?
+  // Appointment / booking controls
+  allowDoubleBooking  Boolean @default(false)
+  largeDogWeightKg    Float   @default(30)
+  scheduleIntervalMin Int     @default(60)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_settings")
+}
+
+/// Weekly operating hours per store (drives availability + booking constraints).
+model StoreHours {
+  id       String  @id @default(cuid())
+  tenantId String
+  storeId  String
+  /// 0 = Sunday … 6 = Saturday
+  weekday  Int
+  isOpen   Boolean @default(true)
+  /// Minutes from midnight.
+  openMin  Int     @default(480)
+  closeMin Int     @default(1140)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, weekday])
+  @@index([tenantId])
+  @@map("store_hours")
 }
 
 /// Business expense (rent, supplies, payroll, etc.) — for the Sales & Expense report.

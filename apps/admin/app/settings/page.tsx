@@ -16,6 +16,13 @@ interface SettingItem {
 
 const SECTIONS: { group: string; items: SettingItem[] }[] = [
   {
+    group: 'Business',
+    items: [
+      { href: '/settings/business', title: 'Business Settings', description: 'Info, localization, social & business hours', icon: '🏢', perm: 'settings.manage' },
+      { href: '/settings/booking', title: 'Appointment Controls', description: 'Double-booking, slot interval, large-dog weight', icon: '⚙️', perm: 'settings.manage' },
+    ],
+  },
+  {
     group: 'Catalog & Pricing',
     items: [
       { href: '/packages', title: 'Packages', description: 'Services, add-ons & per-location pricing', icon: '📦', perm: 'packages.manage' },

@@ -30,6 +30,7 @@ export const PERMISSION_CATALOG = [
   { group: 'Administration', perms: [
     { key: 'analytics.view', label: 'View HQ analytics' },
     { key: 'staff.manage', label: 'Manage staff & permissions' },
+    { key: 'settings.manage', label: 'Manage business settings' },
     { key: 'allLocations', label: 'Access all locations' },
   ]},
 ] as const;
@@ -43,7 +44,7 @@ export const ROLE_DEFAULTS: Record<UserRole, string[]> = {
     'clients.view', 'clients.edit', 'clients.delete',
     'calendar.view', 'calendar.manage', 'bookings.checkout', 'bookings.process',
     'packages.manage', 'coupons.manage', 'memberships.manage',
-    'inventory.manage', 'scheduling.manage', 'analytics.view', 'staff.manage',
+    'inventory.manage', 'scheduling.manage', 'analytics.view', 'staff.manage', 'settings.manage',
   ],
   RECEPTION: [
     'clients.view', 'clients.edit',
