@@ -5,17 +5,23 @@ import { useRouter } from 'next/navigation';
 import { apiFetch, getToken } from '@/lib/api';
 
 interface BookingPhoto { id: string; kind: string; url: string; createdAt: string }
+interface GroomerPet {
+  id: string; name: string; species: string; breed: string | null; weightKg: number | null;
+  dateOfBirth: string | null; gender: string | null; hairLength: string | null; isFixed: boolean;
+  tags: string[]; allergies: string | null; medicalNotes: string | null; groomNotes: string | null; photoUrl: string | null;
+}
 interface GroomerBooking {
   id: string;
   status: string;
   scheduledStart: string;
   notes: string | null;
-  customer: { fullName: string; tags: string[] };
-  pet: { name: string; breed: string | null; weightKg: number | null; tags: string[]; medicalNotes: string | null; groomNotes: string | null; photoUrl: string | null } | null;
-  lineItems: { description: string }[];
+  customer: { id: string; fullName: string; tags: string[] };
+  pet: GroomerPet | null;
+  lineItems: { id: string; description: string; unitPriceCents: number }[];
   workflow: { stage: string; occurredAt: string }[];
   photos?: BookingPhoto[];
 }
+interface AddOn { id: string; name: string; basePriceCents: number; kind: string }
 
 const STAGES = ['CHECK_IN','BEFORE_PHOTOS','BATH','DRYING','STYLING','NAILS','QUALITY_CHECK','AFTER_PHOTOS','READY'];
 
@@ -38,6 +44,10 @@ export default function GroomerPage() {
   const [active, setActive] = useState<GroomerBooking | null>(null);
   const [loading, setLoading] = useState(true);
   const [storeId, setStoreId] = useState('');
+  const [addOns, setAddOns] = useState<AddOn[]>([]);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [showPetInfo, setShowPetInfo] = useState(false);
 
   useEffect(() => {
     if (!getToken()) { router.push('/login'); return; }
@@ -52,7 +62,36 @@ export default function GroomerPage() {
         if (data) setBookings(data.filter(b => ['CONFIRMED','CHECKED_IN','IN_PROGRESS','READY'].includes(b.status)));
       })
       .finally(() => setLoading(false));
+    // Load add-on catalog for the "add on" picker
+    apiFetch<AddOn[]>('/catalog').then(items => setAddOns(items.filter(i => i.kind === 'ADDON'))).catch(() => {});
   }, [router]);
+
+  async function refreshActive() {
+    if (!active) return;
+    const updated = await apiFetch<GroomerBooking>(`/bookings/${active.id}`);
+    setActive(updated);
+    setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
+  }
+
+  async function addAddOn(catalogItemId: string) {
+    if (!active || !catalogItemId) return;
+    await apiFetch(`/bookings/${active.id}/line-items`, { method: 'POST', body: JSON.stringify({ catalogItemId }) });
+    refreshActive();
+  }
+  async function removeAddOn(lineItemId: string) {
+    if (!active) return;
+    await apiFetch(`/bookings/${active.id}/line-items/${lineItemId}`, { method: 'DELETE' });
+    refreshActive();
+  }
+
+  async function saveGroomerNote() {
+    if (!active?.customer.id || !noteDraft.trim()) return;
+    setSavingNote(true);
+    await apiFetch(`/customers/${active.customer.id}/notes`, { method: 'POST', body: JSON.stringify({ body: noteDraft.trim() }) });
+    setNoteDraft('');
+    setSavingNote(false);
+    alert('Note saved to client profile.');
+  }
 
   async function advanceStage(stage: string) {
     if (!active) return;
@@ -62,19 +101,15 @@ export default function GroomerPage() {
     setBookings(prev => prev.map(b => b.id === updated.id ? updated : b));
   }
 
-  async function uploadPhoto(kind: 'BEFORE' | 'AFTER', file: File) {
+  async function uploadPhotos(kind: 'BEFORE' | 'AFTER', files: FileList) {
     if (!active) return;
-    if (file.size > 2_000_000) { alert('Image too large (max 2 MB)'); return; }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      await apiFetch(`/bookings/${active.id}/photos`, {
-        method: 'POST',
-        body: JSON.stringify({ kind, url: reader.result as string }),
-      });
-      const updated = await apiFetch<GroomerBooking>(`/bookings/${active.id}`);
-      setActive(updated);
-    };
-    reader.readAsDataURL(file);
+    const list = Array.from(files);
+    for (const file of list) {
+      if (file.size > 2_000_000) { alert(`${file.name} too large (max 2 MB) — skipped`); continue; }
+      const url = await new Promise<string>(res => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(file); });
+      await apiFetch(`/bookings/${active.id}/photos`, { method: 'POST', body: JSON.stringify({ kind, url }) });
+    }
+    refreshActive();
   }
 
   if (loading) return <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">Loading…</div>;
@@ -160,15 +195,46 @@ export default function GroomerPage() {
             📋 {active.pet.groomNotes}
           </div>
         )}
+        {active.pet && (
+          <>
+            <button onClick={() => setShowPetInfo(s => !s)} className="mt-3 text-xs text-neutral-400 hover:text-neutral-200">
+              {showPetInfo ? '▲ Hide' : '▼ View'} full pet info
+            </button>
+            {showPetInfo && (
+              <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-neutral-900/50 p-3 text-sm">
+                <div><span className="text-neutral-500">Species:</span> {active.pet.species}</div>
+                <div><span className="text-neutral-500">Breed:</span> {active.pet.breed ?? 'N/A'}</div>
+                <div><span className="text-neutral-500">Gender:</span> {active.pet.gender ?? 'N/A'}</div>
+                <div><span className="text-neutral-500">Fixed:</span> {active.pet.isFixed ? 'Yes' : 'Intact'}</div>
+                <div><span className="text-neutral-500">Hair:</span> {active.pet.hairLength ?? 'N/A'}</div>
+                <div><span className="text-neutral-500">Weight:</span> {active.pet.weightKg ?? '?'} kg</div>
+                <div><span className="text-neutral-500">DOB:</span> {active.pet.dateOfBirth ? new Date(active.pet.dateOfBirth).toLocaleDateString('en-CA') : 'N/A'}</div>
+                {active.pet.allergies && <div className="col-span-2 text-orange-300">⚠ Allergies: {active.pet.allergies}</div>}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Services */}
-      {active.lineItems.length > 0 && (
-        <div className="rounded-xl bg-neutral-800 p-4 mb-4">
-          <p className="text-xs font-semibold text-neutral-400 uppercase mb-2">Services</p>
-          {active.lineItems.map((l, i) => <p key={i} className="text-sm">{l.description}</p>)}
+      {/* Services + add-ons */}
+      <div className="rounded-xl bg-neutral-800 p-4 mb-4">
+        <p className="text-xs font-semibold text-neutral-400 uppercase mb-2">Services &amp; add-ons</p>
+        <div className="space-y-1 mb-3">
+          {active.lineItems.map(l => (
+            <div key={l.id} className="flex items-center justify-between text-sm">
+              <span>{l.description} <span className="text-neutral-500">${(l.unitPriceCents / 100).toFixed(2)}</span></span>
+              <button onClick={() => removeAddOn(l.id)} className="text-xs text-red-400 hover:text-red-300">✕</button>
+            </div>
+          ))}
+          {active.lineItems.length === 0 && <p className="text-sm text-neutral-500">No services yet.</p>}
         </div>
-      )}
+        <select className="w-full rounded-lg bg-neutral-700 border border-neutral-600 px-3 py-2 text-sm text-white"
+          value="" onChange={e => addAddOn(e.target.value)}>
+          <option value="">+ Add on a service (flows to checkout)…</option>
+          {addOns.map(a => <option key={a.id} value={a.id}>{a.name} — ${(a.basePriceCents / 100).toFixed(2)}</option>)}
+        </select>
+        <p className="mt-1 text-xs text-neutral-500">e.g. add De-matting if the groom ran long — it appears on the bill at checkout.</p>
+      </div>
 
       {/* Workflow stages */}
       <div className="rounded-xl bg-neutral-800 p-4 mb-4">
@@ -204,20 +270,34 @@ export default function GroomerPage() {
               <div key={kind}>
                 <p className="text-xs text-neutral-400 mb-1">{kind}</p>
                 <div className="space-y-2">
-                  {photos.map(p => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={p.id} src={p.url} alt={kind} className="w-full rounded-lg object-cover" />
-                  ))}
-                  <label className="flex h-20 items-center justify-center rounded-lg border-2 border-dashed border-neutral-600 text-sm text-neutral-400 cursor-pointer hover:border-brand">
-                    + Add {kind.toLowerCase()}
-                    <input type="file" accept="image/*" capture="environment" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadPhoto(kind, f); }} />
+                  <div className="grid grid-cols-2 gap-1">
+                    {photos.map(p => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={p.id} src={p.url} alt={kind} className="w-full rounded-lg object-cover aspect-square" />
+                    ))}
+                  </div>
+                  <label className="flex h-16 items-center justify-center rounded-lg border-2 border-dashed border-neutral-600 text-sm text-neutral-400 cursor-pointer hover:border-brand">
+                    + Add {kind.toLowerCase()} photo(s)
+                    <input type="file" accept="image/*" capture="environment" multiple className="hidden"
+                      onChange={e => { if (e.target.files?.length) uploadPhotos(kind, e.target.files); }} />
                   </label>
                 </div>
               </div>
             );
           })}
         </div>
+      </div>
+
+      {/* Groomer note → client profile */}
+      <div className="rounded-xl bg-neutral-800 p-4 mb-4">
+        <p className="text-xs font-semibold text-neutral-400 uppercase mb-2">Add note to client profile</p>
+        <textarea rows={2} value={noteDraft} onChange={e => setNoteDraft(e.target.value)}
+          className="w-full rounded-lg bg-neutral-700 border border-neutral-600 px-3 py-2 text-sm text-white resize-none"
+          placeholder="e.g. Very anxious with dryer — keep low. Pulls on nails." />
+        <button onClick={saveGroomerNote} disabled={savingNote || !noteDraft.trim()}
+          className="mt-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+          {savingNote ? 'Saving…' : 'Save to client profile'}
+        </button>
       </div>
 
       {/* Timeline */}

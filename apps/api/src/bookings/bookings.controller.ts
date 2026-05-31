@@ -70,6 +70,21 @@ export class BookingsController {
     return this.bookings.removeGroomer(id, userId);
   }
 
+  // ── Add-on line items (groomer PWA → checkout) ─────────────────────────────
+
+  @Roles('GROOMER', 'RECEPTION', 'STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Post(':id/line-items')
+  addLineItem(@Param('id') id: string, @Body() dto: { catalogItemId?: string; description?: string; amountCents?: number }, @CurrentUser() user: AuthUser) {
+    return this.bookings.addLineItem(id, dto, user.tenantId);
+  }
+
+  @Roles('GROOMER', 'RECEPTION', 'STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Delete(':id/line-items/:lineItemId')
+  @HttpCode(204)
+  removeLineItem(@Param('lineItemId') lineItemId: string) {
+    return this.bookings.removeLineItem(lineItemId);
+  }
+
   // ── Multi-pet ─────────────────────────────────────────────────────────────
 
   @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN', 'RECEPTION')

@@ -469,6 +469,41 @@ export class BookingsService {
     return { removed: true };
   }
 
+  // ── Add-on line items (groomer adds during the job → flows to checkout) ────
+
+  async addLineItem(bookingId: string, dto: { catalogItemId?: string; description?: string; amountCents?: number }, tenantId: string) {
+    const booking = await this.prisma.db.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    let description = dto.description ?? 'Add-on';
+    let unitPriceCents = dto.amountCents ?? 0;
+    let catalogItemId: string | undefined;
+
+    if (dto.catalogItemId) {
+      const item = await this.prisma.db.catalogItem.findUnique({
+        where: { id: dto.catalogItemId },
+        include: { storeOverrides: { where: { storeId: booking.storeId } } },
+      });
+      if (item) {
+        description = item.name;
+        unitPriceCents = item.storeOverrides[0]?.priceCents ?? item.basePriceCents;
+        catalogItemId = item.id;
+      }
+    }
+
+    const line = await this.prisma.db.bookingLineItem.create({
+      data: { tenantId, bookingId, catalogItemId, description, quantity: 1, unitPriceCents },
+    });
+    await this.audit.log({ action: 'BOOKING_ADD_LINEITEM', entityType: 'booking', entityId: bookingId, metadata: { description, unitPriceCents } });
+    this.realtime.emitQueueUpdate(booking.storeId, { bookingId, addOn: description });
+    return line;
+  }
+
+  async removeLineItem(lineItemId: string) {
+    await this.prisma.db.bookingLineItem.delete({ where: { id: lineItemId } });
+    return { removed: true };
+  }
+
   // ── Multi-pet ────────────────────────────────────────────────────────────
 
   async addPet(bookingId: string, petId: string, tenantId: string) {
