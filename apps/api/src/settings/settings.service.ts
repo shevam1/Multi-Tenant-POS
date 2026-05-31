@@ -82,4 +82,37 @@ export class SettingsService {
     await this.audit.log({ action: 'STORE_HOURS_UPDATE', entityType: 'store', entityId: storeId });
     return this.getHours(storeId);
   }
+
+  // ── Closed calendar (holiday / blackout date ranges) ────────────────────────
+
+  /** Upcoming + recent closures for a store (most recent end first). */
+  async listClosures(storeId: string, tenantId?: string) {
+    const db = tenantId ? this.prisma.forTenant(tenantId) : this.prisma.db;
+    return db.storeClosure.findMany({ where: { storeId }, orderBy: { startDate: 'asc' } });
+  }
+
+  async addClosure(storeId: string, dto: { startDate: string; endDate?: string; reason?: string }, tenantId: string) {
+    const start = new Date(dto.startDate + 'T00:00:00Z');
+    const end = new Date((dto.endDate || dto.startDate) + 'T00:00:00Z');
+    const closure = await this.prisma.db.storeClosure.create({
+      data: { tenantId, storeId, startDate: start, endDate: end < start ? start : end, reason: dto.reason || null },
+    });
+    await this.audit.log({ action: 'STORE_CLOSURE_ADD', entityType: 'store', entityId: storeId, metadata: { from: dto.startDate, to: dto.endDate } });
+    return closure;
+  }
+
+  async removeClosure(id: string) {
+    await this.prisma.db.storeClosure.delete({ where: { id } });
+  }
+
+  /** True if the given YYYY-MM-DD date falls within any closure for the store. */
+  async isClosedOn(storeId: string, date: string, tenantId?: string): Promise<{ closed: boolean; reason?: string }> {
+    const db = tenantId ? this.prisma.forTenant(tenantId) : this.prisma.db;
+    const d = new Date(date + 'T00:00:00Z');
+    const hit = await db.storeClosure.findFirst({
+      where: { storeId, startDate: { lte: d }, endDate: { gte: d } },
+      select: { reason: true },
+    });
+    return hit ? { closed: true, reason: hit.reason ?? undefined } : { closed: false };
+  }
 }

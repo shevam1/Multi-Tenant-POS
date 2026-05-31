@@ -63,7 +63,8 @@ BEGIN
       ('tenant_settings',        'tenantId'),
       ('store_hours',            'tenantId'),
       ('role',                   'tenantId'),
-      ('service_category',       'tenantId')
+      ('service_category',       'tenantId'),
+      ('store_closure',          'tenantId')
     ) AS v(table_name, tenant_col)
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t.table_name);

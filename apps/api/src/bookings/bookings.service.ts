@@ -367,10 +367,13 @@ export class BookingsService {
 
     // Configured store hours for this weekday + booking interval setting.
     const weekday = dayStart.getDay();
-    const [hours, engine] = await Promise.all([
+    const [hours, engine, closure] = await Promise.all([
       this.settings.getHours(storeId, tenantId),
       this.settings.forEngine(tenantId),
+      this.settings.isClosedOn(storeId, date, tenantId),
     ]);
+    // Closed Calendar (holiday/blackout) overrides weekly hours.
+    if (closure.closed) return { date, closed: true, reason: closure.reason, slots: [] };
     const dayHours = hours.find(h => h.weekday === weekday)!;
     if (!dayHours.isOpen) return { date, closed: true, slots: [] };
     const stepMin = engine.scheduleIntervalMin || 60;

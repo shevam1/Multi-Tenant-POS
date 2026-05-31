@@ -207,6 +207,7 @@ model Tenant {
   storeHours       StoreHours[]
   roles            Role[]
   serviceCategories ServiceCategory[]
+  storeClosures    StoreClosure[]
 
   @@map("tenant")
 }
@@ -236,6 +237,7 @@ model Store {
   products         Product[]
   expenses         Expense[]
   hours            StoreHours[]
+  closures         StoreClosure[]
 
   @@index([tenantId])
   @@map("store")
@@ -1046,6 +1048,25 @@ model StoreHours {
   @@unique([storeId, weekday])
   @@index([tenantId])
   @@map("store_hours")
+}
+
+/// Closed Calendar — holiday / blackout date ranges that override weekly hours.
+/// A store is fully closed on any day within [startDate, endDate] (inclusive).
+model StoreClosure {
+  id        String   @id @default(cuid())
+  tenantId  String
+  storeId   String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  reason    String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([storeId, startDate])
+  @@map("store_closure")
 }
 
 /// Business expense (rent, supplies, payroll, etc.) — for the Sales & Expense report.
