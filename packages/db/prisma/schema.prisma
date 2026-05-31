@@ -205,6 +205,7 @@ model Tenant {
   expenses         Expense[]
   settings         TenantSettings?
   storeHours       StoreHours[]
+  roles            Role[]
 
   @@map("tenant")
 }
@@ -255,11 +256,15 @@ model User {
   mustResetPassword Boolean @default(false)
   /// Commission rate (0..1) on attributed service revenue — for payroll/analytics.
   commissionRate Float   @default(0.4)
+  /// Optional custom role (Settings → Roles). When set, drives effective
+  /// permissions + login control; `role` (enum) is kept in sync as the RBAC base.
+  roleId       String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   store          Store?           @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  customRole     Role?            @relation(fields: [roleId], references: [id], onDelete: SetNull)
   shifts         ShiftSchedule[]
   timeclockEntries TimeclockEntry[]
   leaveRequests  LeaveRequest[]
@@ -269,6 +274,29 @@ model User {
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("app_user")
+}
+
+/// A role tier — system roles (mirroring the UserRole enum) plus custom tiers.
+/// `baseRole` keeps @Roles() RBAC guards working for custom roles.
+model Role {
+  id           String   @id @default(cuid())
+  tenantId     String
+  /// Stable key (system roles use the enum value, e.g. "GROOMER").
+  key          String
+  name         String
+  baseRole     UserRole
+  permissions  String[] @default([])
+  loginEnabled Boolean  @default(true)
+  isSystem     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users  User[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("role")
 }
 
 /// Append-only audit trail of sensitive staff actions (spec section 2).

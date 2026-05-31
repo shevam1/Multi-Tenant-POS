@@ -17,7 +17,6 @@ interface PermCatalog {
 }
 interface AuthMe { userId: string; role: string; storeId: string | null; permissions: string[] }
 
-const ROLES = ['FRANCHISE_HQ_ADMIN', 'STORE_MANAGER', 'RECEPTION', 'GROOMER', 'CALL_CENTER_AGENT'];
 const ROLE_LABEL: Record<string, string> = {
   FRANCHISE_HQ_ADMIN: 'HQ Admin', STORE_MANAGER: 'Store Manager', RECEPTION: 'Reception',
   GROOMER: 'Groomer', CALL_CENTER_AGENT: 'Call Center',
@@ -130,7 +129,8 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
 }) {
   const [fullName, setFullName] = useState(user?.fullName ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
-  const [role, setRole] = useState(user?.role ?? 'RECEPTION');
+  const [roles, setRoles] = useState<{ id: string; name: string; baseRole: string; permissions: string[] }[]>([]);
+  const [roleId, setRoleId] = useState('');
   const [storeId, setStoreId] = useState(user?.storeId ?? (isHQ ? '' : myStoreId ?? ''));
   const [password, setPassword] = useState('');
   const [active, setActive] = useState(user?.active ?? true);
@@ -141,9 +141,20 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
   const [error, setError] = useState('');
 
   useEffect(() => { if (user && user.permissions.length > 0) setCustomPerms(true); }, [user]);
+  useEffect(() => {
+    apiFetch<{ id: string; name: string; baseRole: string; permissions: string[]; roleId?: string }[]>('/roles').then(rs => {
+      setRoles(rs);
+      // Default selection: the user's assigned role, else the role matching their base enum
+      const match = (user as unknown as { roleId?: string })?.roleId
+        ? rs.find(r => r.id === (user as unknown as { roleId?: string }).roleId)
+        : rs.find(r => r.baseRole === (user?.role ?? 'RECEPTION'));
+      setRoleId(match?.id ?? rs[0]?.id ?? '');
+    }).catch(() => {});
+  }, [user]);
 
-  // Effective perms preview = custom selection OR role defaults
-  const shownPerms = customPerms ? selectedPerms : perms.roleDefaults[role] ?? [];
+  const selectedRole = roles.find(r => r.id === roleId);
+  // Effective perms preview = custom selection OR the selected role's permissions
+  const shownPerms = customPerms ? selectedPerms : (selectedRole?.permissions ?? []);
 
   function togglePerm(key: string) {
     setSelectedPerms(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
@@ -152,16 +163,18 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
   async function save() {
     if (!fullName.trim()) { setError('Name required'); return; }
     if (mode === 'create' && (!email.trim() || password.length < 8)) { setError('Email + password (min 8 chars) required'); return; }
+    if (!selectedRole) { setError('Select a role'); return; }
     setSaving(true); setError('');
     try {
       const permsToSave = customPerms ? selectedPerms : [];
+      const role = selectedRole.baseRole;
       if (mode === 'create') {
         await apiFetch('/staff', { method: 'POST', body: JSON.stringify({
-          email, fullName, role, storeId: storeId || null, password, permissions: permsToSave,
+          email, fullName, role, roleId, storeId: storeId || null, password, permissions: permsToSave,
         })});
       } else if (user) {
         await apiFetch(`/staff/${user.id}`, { method: 'PATCH', body: JSON.stringify({
-          fullName, role, storeId: storeId || null, active, permissions: permsToSave,
+          fullName, role, roleId, storeId: storeId || null, active, permissions: permsToSave,
         })});
       }
       onSaved();
@@ -211,15 +224,15 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-neutral-500 mb-1">Role</label>
-              <select className="w-full rounded-lg border px-3 py-2 text-sm bg-white" value={role} onChange={e => setRole(e.target.value)}>
-                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              <select className="w-full rounded-lg border px-3 py-2 text-sm bg-white" value={roleId} onChange={e => setRoleId(e.target.value)}>
+                {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-neutral-500 mb-1">Location</label>
               <select className="w-full rounded-lg border px-3 py-2 text-sm bg-white disabled:bg-neutral-50"
                 value={storeId} disabled={!isHQ} onChange={e => setStoreId(e.target.value)}>
-                <option value="">{role === 'FRANCHISE_HQ_ADMIN' ? 'All locations' : 'Select…'}</option>
+                <option value="">{selectedRole?.baseRole === 'FRANCHISE_HQ_ADMIN' ? 'All locations' : 'Select…'}</option>
                 {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -236,7 +249,7 @@ function StaffModal({ mode, user, stores, perms, isHQ, myStoreId, onClose, onSav
           <div className="rounded-xl border p-4">
             <label className="flex items-center gap-2 text-sm font-medium mb-3">
               <input type="checkbox" checked={customPerms} onChange={e => setCustomPerms(e.target.checked)} />
-              Custom permissions (otherwise inherits {ROLE_LABEL[role]} defaults)
+              Custom permissions (otherwise inherits {selectedRole?.name ?? 'role'} defaults)
             </label>
             <div className="space-y-3">
               {perms.catalog.map(g => (

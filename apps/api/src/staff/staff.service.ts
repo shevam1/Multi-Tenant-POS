@@ -9,6 +9,7 @@ export interface CreateStaffDto {
   email: string;
   fullName: string;
   role: UserRole;
+  roleId?: string | null;
   storeId?: string | null;
   password: string;
   permissions?: string[];
@@ -17,6 +18,7 @@ export interface CreateStaffDto {
 export interface UpdateStaffDto {
   fullName?: string;
   role?: UserRole;
+  roleId?: string | null;
   storeId?: string | null;
   active?: boolean;
   permissions?: string[];
@@ -59,35 +61,49 @@ export class StaffService {
     }));
   }
 
+  /** Resolve a custom roleId → its baseRole enum (for RBAC guard compatibility). */
+  private async baseRoleFor(roleId: string | null | undefined, fallback: UserRole): Promise<UserRole> {
+    if (!roleId) return fallback;
+    const role = await this.prisma.db.role.findUnique({ where: { id: roleId } });
+    return (role?.baseRole as UserRole) ?? fallback;
+  }
+
   async create(dto: CreateStaffDto, tenantId: string) {
     if (dto.role === 'CUSTOMER') throw new BadRequestException('Cannot create CUSTOMER as staff');
 
     const existing = await this.prisma.db.user.findFirst({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('A user with that email already exists');
 
+    const role = await this.baseRoleFor(dto.roleId, dto.role);
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const user = await this.prisma.db.user.create({
       data: {
         tenantId,
         email: dto.email,
         fullName: dto.fullName,
-        role: dto.role,
+        role,                       // enum base role keeps @Roles() guards working
+        roleId: dto.roleId ?? null, // custom-role link drives permissions + login
         storeId: dto.storeId ?? null,
         passwordHash,
         permissions: dto.permissions ?? [],
         mustResetPassword: true,
       },
     });
-    await this.audit.log({ action: 'STAFF_CREATE', entityType: 'user', entityId: user.id, metadata: { role: dto.role } });
+    await this.audit.log({ action: 'STAFF_CREATE', entityType: 'user', entityId: user.id, metadata: { role, roleId: dto.roleId } });
     return this.publicShape(user);
   }
 
   async update(id: string, dto: UpdateStaffDto) {
+    // When a roleId is provided, sync the enum base role for RBAC guards
+    const roleEnum = dto.roleId !== undefined
+      ? await this.baseRoleFor(dto.roleId, dto.role ?? 'GROOMER')
+      : dto.role;
     const user = await this.prisma.db.user.update({
       where: { id },
       data: {
         ...(dto.fullName !== undefined && { fullName: dto.fullName }),
-        ...(dto.role !== undefined && { role: dto.role }),
+        ...(roleEnum !== undefined && { role: roleEnum }),
+        ...(dto.roleId !== undefined && { roleId: dto.roleId }),
         ...(dto.storeId !== undefined && { storeId: dto.storeId }),
         ...(dto.active !== undefined && { active: dto.active }),
         ...(dto.permissions !== undefined && { permissions: dto.permissions }),

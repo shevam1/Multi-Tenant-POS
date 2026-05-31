@@ -39,7 +39,8 @@ const SECTIONS: { group: string; items: SettingItem[] }[] = [
   {
     group: 'Team',
     items: [
-      { href: '/staff', title: 'Staff & Permissions', description: 'Logins, roles & access', icon: '👥', perm: 'staff.manage' },
+      { href: '/staff', title: 'Staff', description: 'Staff logins & accounts', icon: '👥', perm: 'staff.manage' },
+      { href: '/settings/roles', title: 'Roles & Permissions', description: 'Custom role tiers, access & login control', icon: '🔐', perm: 'staff.manage' },
       { href: '/scheduling', title: 'Schedule', description: 'Shift roster & leave requests', icon: '🗓️', perm: 'scheduling.manage' },
     ],
   },

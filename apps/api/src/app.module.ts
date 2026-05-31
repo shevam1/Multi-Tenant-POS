@@ -29,6 +29,7 @@ import { MessagingModule } from './messaging/messaging.module';
 import { ProductsModule } from './products/products.module';
 import { FinanceModule } from './finance/finance.module';
 import { SettingsModule } from './settings/settings.module';
+import { RolesAdminModule } from './roles/roles.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { SettingsModule } from './settings/settings.module';
     ProductsModule,
     FinanceModule,
     SettingsModule,
+    RolesAdminModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -37,6 +37,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Login control (spec §6): a role with login disabled blocks all its users.
+    if (user.roleId) {
+      const role = await this.prisma.asSystem(tx => tx.role.findUnique({ where: { id: user.roleId! } }));
+      if (role && !role.loginEnabled) {
+        throw new UnauthorizedException('Login is disabled for your role. Contact your administrator.');
+      }
+    }
+
     const authUser: AuthUser = {
       userId: user.id,
       tenantId: user.tenantId,
@@ -62,18 +70,25 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.prisma.db.user.findUnique({
       where: { id: userId },
-      include: { store: { select: { id: true, name: true } } },
+      include: { store: { select: { id: true, name: true } }, customRole: true },
     });
     if (!user) return null;
+    // Effective permissions: explicit user overrides > custom-role perms > role defaults
+    const permissions = user.permissions.length > 0
+      ? user.permissions
+      : user.customRole
+        ? user.customRole.permissions
+        : effectivePermissions(user.role, user.permissions);
     return {
       userId: user.id,
       tenantId: user.tenantId,
       role: user.role,
+      roleName: user.customRole?.name ?? user.role.replace(/_/g, ' '),
       storeId: user.storeId,
       storeName: user.store?.name ?? null,
       email: user.email,
       fullName: user.fullName,
-      permissions: effectivePermissions(user.role, user.permissions),
+      permissions,
     };
   }
 }
