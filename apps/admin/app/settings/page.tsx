@@ -37,6 +37,12 @@ const SECTIONS: { group: string; items: SettingItem[] }[] = [
     ],
   },
   {
+    group: 'Pet & CRM Data',
+    items: [
+      { href: '/settings/pet-options', title: 'Pet Options', description: 'Type, breed, behavior, coat, weight, vaccine & tag lists', icon: '🐾', perm: 'settings.manage' },
+    ],
+  },
+  {
     group: 'Forms & Compliance',
     items: [
       { href: '/forms', title: 'Forms', description: 'Intake & consent form builder', icon: '📝' },

@@ -30,6 +30,7 @@ import { ProductsModule } from './products/products.module';
 import { FinanceModule } from './finance/finance.module';
 import { SettingsModule } from './settings/settings.module';
 import { RolesAdminModule } from './roles/roles.module';
+import { PetOptionsModule } from './pet-options/pet-options.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { RolesAdminModule } from './roles/roles.module';
     FinanceModule,
     SettingsModule,
     RolesAdminModule,
+    PetOptionsModule,
   ],
   controllers: [HealthController],
   providers: [

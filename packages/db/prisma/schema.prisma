@@ -223,6 +223,7 @@ model Tenant {
   roles            Role[]
   serviceCategories ServiceCategory[]
   storeClosures    StoreClosure[]
+  petOptions       PetOption[]
 
   @@map("tenant")
 }
@@ -1080,6 +1081,32 @@ model StoreHours {
   @@unique([storeId, weekday])
   @@index([tenantId])
   @@map("store_hours")
+}
+
+/// Pet Options taxonomy (spec §9) — configurable dropdown lists that populate
+/// pet records: type/breeds, behavior, hair/coat, weight brackets, fixed,
+/// vaccine catalog, coat color, tags. One row per option value.
+model PetOption {
+  id        String   @id @default(cuid())
+  tenantId  String
+  /// PET_TYPE | BREED | BEHAVIOR | HAIR | WEIGHT | FIXED | VACCINE | COAT_COLOR | PET_TAG
+  category  String
+  label     String
+  sortOrder Int      @default(0)
+  /// Breeds link to their parent PET_TYPE option.
+  parentId  String?
+  /// Weight bracket bounds (WEIGHT category), in the tenant's configured unit.
+  minValue  Float?
+  maxValue  Float?
+  /// VACCINE: whether this vaccine is required for booking (drives the alert engine).
+  required  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, category])
+  @@map("pet_option")
 }
 
 /// Closed Calendar — holiday / blackout date ranges that override weekly hours.
