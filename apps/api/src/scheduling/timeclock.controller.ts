@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post, Query } from '@nestjs/common';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { AuthUser } from '../auth/auth.types';
 import { TimeclockService } from './timeclock.service';
@@ -52,6 +52,25 @@ export class TimeclockController {
     @Query('to') to: string,
   ) {
     return this.svc.hoursReport(storeId, from, to);
+  }
+
+  /** POST /timeclock/manual — manager manual time punch (spec §8.3C). */
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Post('manual')
+  manualPunch(
+    @Body() dto: { userId: string; storeId: string; date: string; clockIn: string; clockOut: string; notes: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.manualPunch(dto, user.tenantId);
+  }
+
+  /** GET /timeclock/export — CSV of the hours report (spec §8.3B). */
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Get('export')
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="timeclock-report.csv"')
+  exportCsv(@Query('storeId') storeId: string, @Query('from') from: string, @Query('to') to: string) {
+    return this.svc.exportCsv(storeId, from, to);
   }
 
   /** POST /timeclock/flag-incomplete — flag orphaned entries (cron or manual trigger). */

@@ -105,6 +105,38 @@ export class TimeclockService {
     }));
   }
 
+  /**
+   * Manager manual time punch (spec §8.3C): mandatory note, strict End > Start.
+   */
+  async manualPunch(
+    dto: { userId: string; storeId: string; date: string; clockIn: string; clockOut: string; notes: string },
+    tenantId: string,
+  ) {
+    if (!dto.notes?.trim()) throw new BadRequestException('A note is required for manual time entries.');
+    const clockIn = new Date(`${dto.date}T${dto.clockIn}:00`);
+    const clockOut = new Date(`${dto.date}T${dto.clockOut}:00`);
+    if (isNaN(clockIn.getTime()) || isNaN(clockOut.getTime())) throw new BadRequestException('Invalid date or time.');
+    if (clockOut <= clockIn) throw new BadRequestException('End time must be after start time.');
+
+    const entry = await this.prisma.db.timeclockEntry.create({
+      data: { tenantId, storeId: dto.storeId, userId: dto.userId, clockIn, clockOut, notes: dto.notes.trim() },
+    });
+    await this.audit.log({ action: 'TIMECLOCK_MANUAL', entityType: 'timeclock_entry', entityId: entry.id, metadata: { userId: dto.userId } });
+    return entry;
+  }
+
+  /** CSV of the per-employee hours report for a pay period (spec §8.3B Export). */
+  async exportCsv(storeId: string, from: string, to: string): Promise<string> {
+    const report = await this.hoursReport(storeId, from, to);
+    const esc = (v: string | number) => {
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ['Staff', 'Total Hours', 'Incomplete Entries'];
+    const rows = report.map(r => [esc(r.fullName), r.totalHours, r.incompleteCount].join(','));
+    return [header.join(','), ...rows].join('\n');
+  }
+
   /** Flag all open (incomplete) entries from previous days. */
   async flagIncompleteEntries() {
     const yesterday = new Date();

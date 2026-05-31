@@ -31,6 +31,7 @@ import { FinanceModule } from './finance/finance.module';
 import { SettingsModule } from './settings/settings.module';
 import { RolesAdminModule } from './roles/roles.module';
 import { PetOptionsModule } from './pet-options/pet-options.module';
+import { PayrollModule } from './payroll/payroll.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { PetOptionsModule } from './pet-options/pet-options.module';
     SettingsModule,
     RolesAdminModule,
     PetOptionsModule,
+    PayrollModule,
   ],
   controllers: [HealthController],
   providers: [

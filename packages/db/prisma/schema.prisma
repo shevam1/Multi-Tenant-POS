@@ -275,6 +275,13 @@ model User {
   mustResetPassword Boolean @default(false)
   /// Commission rate (0..1) on attributed service revenue — for payroll/analytics.
   commissionRate Float   @default(0.4)
+  // ── Payroll pay model (spec §8) ──
+  /// HOURLY | COMMISSION — selects the compensation pipeline.
+  payType        String  @default("COMMISSION")
+  /// Commission rate (0..1) on attributed product/retail revenue.
+  productCommissionRate Float @default(0)
+  /// Flat hourly wage in cents (used when payType = HOURLY).
+  hourlyRateCents Int    @default(0)
   // ── Profile (self-service "My Account" + per-staff fields) ──
   phone        String?
   jobTitle     String?
@@ -1057,6 +1064,11 @@ model TenantSettings {
   // SMS auto-reply (spec §10)
   smsAutoReplyEnabled Boolean @default(false)
   smsAutoReplyMessage String?
+  // Payroll (spec §8)
+  commissionIncludesDiscount Boolean @default(false)  // include vs exclude discount in commission base
+  clockInOutEnabled   Boolean @default(true)
+  autoSplitTipsEnabled Boolean @default(false)
+  tipSplitMode        String  @default("EQUAL")        // PRICE | EQUAL
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
