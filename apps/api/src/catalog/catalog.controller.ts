@@ -37,4 +37,48 @@ export class CatalogController {
   setStores(@Param('id') id: string, @Body('overrides') overrides: StoreOverrideDto[], @CurrentUser() user: AuthUser) {
     return this.catalog.setStoreOverrides(id, overrides, user.tenantId);
   }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Post(':id/duplicate')
+  duplicate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.catalog.duplicate(id, user.tenantId);
+  }
+
+  // ── Service categories ─────────────────────────────────────────────────────
+
+  @Get('categories')
+  categories() {
+    return this.catalog.listCategories();
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Post('categories')
+  createCategory(@Body('name') name: string, @CurrentUser() user: AuthUser) {
+    return this.catalog.createCategory(name, user.tenantId);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Patch('categories/:id')
+  renameCategory(@Param('id') id: string, @Body('name') name: string) {
+    return this.catalog.renameCategory(id, name);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Put('categories/reorder')
+  reorderCategories(@Body('orderedIds') orderedIds: string[]) {
+    return this.catalog.reorderCategories(orderedIds);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Delete('categories/:id')
+  @HttpCode(204)
+  deleteCategory(@Param('id') id: string) {
+    return this.catalog.deleteCategory(id);
+  }
+
+  @Roles('STORE_MANAGER', 'FRANCHISE_HQ_ADMIN')
+  @Post('categories/:id/raise-price')
+  raisePrice(@Param('id') id: string, @Body('mode') mode: 'FIXED' | 'PERCENT', @Body('value') value: number) {
+    return this.catalog.raisePrice(id, mode, value);
+  }
 }

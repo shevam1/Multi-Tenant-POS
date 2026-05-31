@@ -206,6 +206,7 @@ model Tenant {
   settings         TenantSettings?
   storeHours       StoreHours[]
   roles            Role[]
+  serviceCategories ServiceCategory[]
 
   @@map("tenant")
 }
@@ -457,17 +458,40 @@ model CatalogItem {
   basePriceCents Int
   durationMin   Int?
   active        Boolean         @default(true)
+  /// Service group/category (collapsible folder).
+  categoryId    String?
+  /// Whether this service is taxable (services taxable by default).
+  taxable       Boolean         @default(true)
+  /// Visible on the customer-facing online booking portal.
+  bookOnline    Boolean         @default(true)
   /// e.g. { sku, calories, allergens } — module-specific.
   attributes    Json            @default("{}")
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category     ServiceCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   bookingLines BookingLineItem[]
   storeOverrides CatalogItemStore[]
 
   @@index([tenantId])
   @@map("catalog_item")
+}
+
+/// Service group / category — collapsible folder for catalog items (spec §7).
+model ServiceCategory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  CatalogItem[]
+
+  @@index([tenantId])
+  @@map("service_category")
 }
 
 /// Per-location pricing + availability override for a catalog item.
