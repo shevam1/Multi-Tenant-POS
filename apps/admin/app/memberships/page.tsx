@@ -43,11 +43,12 @@ export default function MembershipsPage() {
   async function refresh() {
     const [p, c] = await Promise.all([
       apiFetch<Plan[]>('/memberships/plans'),
-      apiFetch<Customer[]>('/customers'),
+      // /customers now returns a paginated { data, total, page, limit } object
+      apiFetch<{ data: Customer[] }>('/customers?page=1&limit=200&status=ALL'),
     ]);
     setPlans(p);
-    setCustomers(c);
-    return c;
+    setCustomers(c.data);
+    return c.data;
   }
 
   useEffect(() => {
