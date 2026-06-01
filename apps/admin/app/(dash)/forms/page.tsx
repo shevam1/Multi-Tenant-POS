@@ -110,18 +110,14 @@ export default function FormBuilderPage() {
   if (loading) return <div className="p-8 text-sm text-neutral-400">Loading…</div>;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-        <h1 className="font-semibold">Intake & Consent Form Builder</h1>
-        {!editing && (
-          <button onClick={newForm} className="ml-auto rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:opacity-90">
-            + New form
-          </button>
-        )}
-      </header>
-
-      <main className="mx-auto max-w-3xl px-6 py-8">
+    <div>
+      <main className="mx-auto max-w-3xl px-8 py-8">
+        <div className="mb-6 flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Intake &amp; Consent Form Builder</h1>
+          {!editing && (
+            <button onClick={newForm} className="ml-auto rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">+ New form</button>
+          )}
+        </div>
         {editing ? (
           /* ── Builder ── */
           <div className="space-y-5">

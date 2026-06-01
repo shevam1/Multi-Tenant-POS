@@ -68,21 +68,15 @@ export default function CompliancePage() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-          <h1 className="font-semibold">Vaccination Compliance Report</h1>
-        </div>
-        <div className="flex items-center gap-2">
+    <div>
+      <main className="mx-auto max-w-5xl px-8 py-8 space-y-6">
+        <div className="mb-2 flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Vaccination Compliance Report</h1>
           <input
-            className="rounded-md border px-3 py-1.5 text-sm w-64 placeholder:text-neutral-400"
+            className="w-64 rounded-md border px-3 py-1.5 text-sm placeholder:text-muted-foreground"
             placeholder="Search by owner or pet name…"
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         {/* Summary chips */}
         <div className="grid grid-cols-4 gap-4">
           {[

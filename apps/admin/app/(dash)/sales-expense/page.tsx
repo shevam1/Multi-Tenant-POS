@@ -59,11 +59,11 @@ export default function SalesExpensePage() {
   function refresh() { load({ from, to, storeId, service }); }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3 flex-wrap">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-        <h1 className="font-semibold">Sales &amp; Expense</h1>
-        <div className="ml-auto flex items-center gap-2 flex-wrap">
+    <div>
+      <main className="mx-auto max-w-5xl px-8 py-8 space-y-5">
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Sales &amp; Expense</h1>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
           <input type="date" className="rounded border px-2 py-1 text-xs" value={from} onChange={e => setFrom(e.target.value)} />
           <span className="text-neutral-400 text-xs">to</span>
           <input type="date" className="rounded border px-2 py-1 text-xs" value={to} onChange={e => setTo(e.target.value)} />
@@ -77,11 +77,9 @@ export default function SalesExpensePage() {
             <option value="">All services / packages</option>
             {services.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <button onClick={refresh} className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white">Run</button>
+          <button onClick={refresh} className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Run</button>
+          </div>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-6 space-y-5">
         {loading || !report ? <p className="text-sm text-neutral-400">Loading…</p> : (
           <>
             {/* Summary */}

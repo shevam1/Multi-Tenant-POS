@@ -147,13 +147,14 @@ export default function BookingDetailPage() {
   const nextStage = WORKFLOW_STAGES.find(s => !completedStages.has(s));
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-4">
-        <button onClick={() => router.back()} className="text-sm text-neutral-500 hover:text-neutral-700">← Back</button>
-        <h1 className="font-semibold">Booking detail</h1>
-        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{booking.status.replace(/_/g,' ')}</span>
-      </header>
-      <main className="mx-auto max-w-4xl px-6 py-8 grid grid-cols-3 gap-6">
+    <div>
+      <main className="mx-auto max-w-4xl px-8 py-8">
+        <div className="mb-6 flex items-center gap-4">
+          <button onClick={() => router.back()} className="text-sm text-muted-foreground hover:text-foreground">← Back</button>
+          <h1 className="text-2xl font-bold tracking-tight">Booking detail</h1>
+          <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{booking.status.replace(/_/g,' ')}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-6">
         {/* Left column */}
         <div className="col-span-2 space-y-6">
           {/* Customer + Pet */}
@@ -384,6 +385,7 @@ export default function BookingDetailPage() {
               ))
             }
           </div>
+        </div>
         </div>
       </main>
     </div>

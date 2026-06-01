@@ -139,16 +139,16 @@ export default function CheckoutPage() {
   if (!booking) return <div className="p-8 text-sm text-red-500">Booking not found</div>;
 
   if (done) return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+    <div className="flex min-h-[70vh] flex-col items-center justify-center gap-4">
       <div className="text-4xl">✅</div>
       <h1 className="text-2xl font-bold">Payment complete</h1>
-      <p className="text-neutral-500">Invoice created · Booking marked COMPLETED</p>
+      <p className="text-muted-foreground">Invoice created · Booking marked COMPLETED</p>
       {earned !== null && earned > 0 && (
-        <p className="rounded-full bg-brand/10 px-4 py-1.5 text-sm font-medium text-brand">
+        <p className="rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
           +{earned} loyalty points earned 🎉
         </p>
       )}
-      <button onClick={() => router.push('/dashboard')} className="mt-4 rounded-md bg-brand px-6 py-2 text-sm font-medium text-white">
+      <button onClick={() => router.push('/dashboard')} className="mt-4 rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground">
         Back to dashboard
       </button>
     </div>
@@ -157,13 +157,13 @@ export default function CheckoutPage() {
   const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-4">
-        <button onClick={() => router.back()} className="text-sm text-neutral-500">← Back</button>
-        <h1 className="font-semibold">POS Checkout</h1>
-        <span className="text-sm text-neutral-400">{booking.store.name}</span>
-      </header>
-      <main className="mx-auto max-w-2xl px-6 py-8 space-y-6">
+    <div>
+      <main className="mx-auto max-w-2xl px-8 py-8 space-y-6">
+        <div className="mb-2 flex items-center gap-4">
+          <button onClick={() => router.back()} className="text-sm text-muted-foreground hover:text-foreground">← Back</button>
+          <h1 className="text-2xl font-bold tracking-tight">POS Checkout</h1>
+          <span className="text-sm text-muted-foreground">{booking.store.name}</span>
+        </div>
         {/* Member banner */}
         {member && (
           <div className="rounded-xl border-2 border-violet-200 bg-gradient-to-r from-violet-50 to-white p-4 shadow-sm">

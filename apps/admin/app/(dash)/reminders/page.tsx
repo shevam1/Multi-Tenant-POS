@@ -59,28 +59,24 @@ export default function RemindersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-        <h1 className="font-semibold">Reminders</h1>
-        <button onClick={() => router.push('/reminders/automation')} className="ml-auto rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:opacity-90">
-          ⚙ Automation settings
-        </button>
-      </header>
-
-      {/* Tabs */}
-      <div className="border-b bg-white px-6 overflow-x-auto">
-        <div className="flex gap-1">
-          {TABS.map(([key, label]) => (
-            <button key={key} onClick={() => switchTab(key)}
-              className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition ${tab === key ? 'border-amber-400 text-neutral-900' : 'border-transparent text-neutral-500 hover:text-neutral-700'}`}>
-              {label}
-            </button>
-          ))}
+    <div>
+      <main className="mx-auto max-w-5xl px-8 py-8">
+        <div className="mb-4 flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Reminders</h1>
+          <button onClick={() => router.push('/reminders/automation')} className="ml-auto rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">⚙ Automation settings</button>
         </div>
-      </div>
 
-      <main className="mx-auto max-w-5xl px-6 py-6">
+        <div className="mb-4 overflow-x-auto border-b">
+          <div className="flex gap-1">
+            {TABS.map(([key, label]) => (
+              <button key={key} onClick={() => switchTab(key)}
+                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition ${tab === key ? 'border-amber-accent text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-xs font-semibold uppercase text-neutral-500 tracking-wide">

@@ -115,14 +115,13 @@ export default function AutomationSettingsPage() {
   const sms = draft ? smsInfo(draft.template) : { len: 0, unicode: false, segments: 0 };
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/reminders')} className="text-sm text-neutral-500 hover:text-neutral-700">← Reminders</button>
-        <h1 className="font-semibold">Automation Settings</h1>
+    <div className="mx-auto max-w-6xl px-8 py-8">
+      <div className="mb-4 flex items-center gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">Automation Settings</h1>
         {dirty && <span className="text-xs text-amber-600">● Unsaved changes</span>}
-      </header>
+      </div>
 
-      <div className="mx-auto flex max-w-6xl gap-6 px-6 py-6">
+      <div className="flex gap-6">
         {/* Left: notification type list */}
         <aside className="w-64 shrink-0">
           <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
