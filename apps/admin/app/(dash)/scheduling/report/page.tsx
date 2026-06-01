@@ -46,14 +46,12 @@ export default function HoursReportPage() {
   const totalIncomplete = rows.reduce((s, r) => s + r.incompleteCount, 0);
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/scheduling')} className="text-sm text-neutral-500 hover:text-neutral-700">← Schedule</button>
-        <h1 className="font-semibold">Hours Report</h1>
-        <span className="ml-auto text-xs text-neutral-400">Feeds payroll · spec §12</span>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-8 space-y-6">
+    <div>
+      <main className="mx-auto max-w-4xl px-8 py-8 space-y-6">
+        <div className="mb-2 flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Hours Report</h1>
+          <span className="ml-auto text-xs text-muted-foreground">Feeds payroll · spec §12</span>
+        </div>
         {/* Date range */}
         <div className="flex items-end gap-4">
           <div>

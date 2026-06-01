@@ -118,23 +118,15 @@ export default function SchedulingPage() {
   const isManager = me?.role === 'STORE_MANAGER' || me?.role === 'FRANCHISE_HQ_ADMIN';
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-          <h1 className="font-semibold">Staff Scheduling</h1>
+    <div>
+      <main className="mx-auto max-w-6xl px-8 py-8 space-y-6">
+        <div className="mb-2 flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Staff Scheduling</h1>
+          <div className="flex items-center gap-2">
+            <a href="/timeclock" className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90">Time Clock</a>
+            <a href="/scheduling/report" className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-secondary">Hours Report</a>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <a href="/timeclock" className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
-            Time Clock
-          </a>
-          <a href="/scheduling/report" className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-neutral-50">
-            Hours Report
-          </a>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-6 py-8 space-y-6">
         {/* Week nav */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

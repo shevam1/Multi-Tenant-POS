@@ -92,30 +92,29 @@ export default function PayrollPage() {
   const isHQ = me?.role === 'FRANCHISE_HQ_ADMIN';
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/settings')} className="text-sm text-neutral-500 hover:text-neutral-700">← Settings</button>
-        <h1 className="font-semibold">Payroll</h1>
-        {isHQ && stores.length > 1 && (
-          <select className="ml-auto rounded border px-2 py-1.5 text-xs bg-white" value={storeId}
-            onChange={e => { setStoreId(e.target.value); loadRoster(e.target.value); setHours(null); setSummary(null); }}>
-            {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        )}
-      </header>
-
-      <div className="border-b bg-white px-6 overflow-x-auto">
-        <div className="flex gap-1">
-          {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition ${tab === t ? 'border-amber-400 text-neutral-900' : 'border-transparent text-neutral-500 hover:text-neutral-700'}`}>
-              {t}
-            </button>
-          ))}
+    <div>
+      <main className="mx-auto max-w-5xl px-8 py-8 space-y-5">
+        <div className="mb-2 flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Payroll</h1>
+          {isHQ && stores.length > 1 && (
+            <select className="ml-auto rounded border bg-white px-2 py-1.5 text-xs" value={storeId}
+              onChange={e => { setStoreId(e.target.value); loadRoster(e.target.value); setHours(null); setSummary(null); }}>
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
         </div>
-      </div>
 
-      <main className="mx-auto max-w-5xl px-6 py-6 space-y-5">
+        <div className="mb-4 overflow-x-auto border-b">
+          <div className="flex gap-1">
+            {TABS.map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition ${tab === t ? 'border-amber-accent text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── Commission Configurations ── */}
         {tab === 'Commission' && (
           <>

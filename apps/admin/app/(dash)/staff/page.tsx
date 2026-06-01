@@ -67,22 +67,20 @@ export default function StaffPage() {
   const isHQ = me?.role === 'FRANCHISE_HQ_ADMIN';
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-        <h1 className="font-semibold">Staff &amp; Permissions</h1>
-        <div className="ml-auto flex items-center gap-2">
-          {isHQ && (
-            <select className="rounded-md border px-3 py-1.5 text-sm bg-white" value={storeFilter} onChange={e => onFilter(e.target.value)}>
-              <option value="">All locations</option>
-              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          )}
-          <button onClick={() => setShowAdd(true)} className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:opacity-90">+ Add staff</button>
+    <div>
+      <main className="mx-auto max-w-5xl px-8 py-8">
+        <div className="mb-6 flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Staff &amp; Permissions</h1>
+          <div className="ml-auto flex items-center gap-2">
+            {isHQ && (
+              <select className="rounded-md border bg-white px-3 py-1.5 text-sm" value={storeFilter} onChange={e => onFilter(e.target.value)}>
+                <option value="">All locations</option>
+                {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+            <button onClick={() => setShowAdd(true)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">+ Add staff</button>
+          </div>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-8">
         {loading ? <p className="text-sm text-neutral-400">Loading…</p> : (
           <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
             <table className="w-full text-sm">

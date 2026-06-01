@@ -71,14 +71,12 @@ export default function TimeclockPage() {
   if (loading) return <div className="p-8 text-sm text-neutral-400">Loading…</div>;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-        <h1 className="font-semibold">Time Clock</h1>
-        <a href="/scheduling" className="ml-auto rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-neutral-50">Schedule</a>
-      </header>
-
-      <main className="mx-auto max-w-2xl px-6 py-8 space-y-8">
+    <div>
+      <main className="mx-auto max-w-2xl px-8 py-8 space-y-8">
+        <div className="mb-2 flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Time Clock</h1>
+          <a href="/scheduling" className="ml-auto rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-secondary">Schedule</a>
+        </div>
         {/* Clock widget */}
         <div className={`rounded-2xl border p-8 text-center shadow-sm ${status?.clockedIn ? 'bg-green-50 border-green-200' : 'bg-white'}`}>
           {status?.clockedIn ? (
