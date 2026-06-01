@@ -49,13 +49,9 @@ export default function SmsAutoReplyPage() {
   const segments = len === 0 ? 0 : Math.ceil(len / GSM_LIMIT);
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/settings')} className="text-sm text-neutral-500 hover:text-neutral-700">← Settings</button>
-        <h1 className="font-semibold">SMS Auto-Reply</h1>
-      </header>
-
-      <main className="mx-auto max-w-2xl px-6 py-8 space-y-6">
+    <div>
+      <main className="mx-auto max-w-2xl px-8 py-8 space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">SMS Auto-Reply</h1>
         <section className="rounded-xl border bg-white p-5 shadow-sm space-y-5">
           <div className="flex items-center justify-between">
             <div>

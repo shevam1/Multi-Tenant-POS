@@ -45,13 +45,9 @@ export default function BookingControlsPage() {
   const unit = s.weightUnit === 'LB' ? 'lb' : 'kg';
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/settings')} className="text-sm text-neutral-500 hover:text-neutral-700">← Settings</button>
-        <h1 className="font-semibold">Appointment &amp; Booking Controls</h1>
-      </header>
-
-      <main className="mx-auto max-w-xl px-6 py-8">
+    <div>
+      <main className="mx-auto max-w-xl px-8 py-8">
+        <h1 className="mb-6 text-2xl font-bold tracking-tight">Appointment &amp; Booking Controls</h1>
         <div className="rounded-xl border bg-white p-6 shadow-sm space-y-6">
           {/* Double booking */}
           <div className="flex items-center justify-between">

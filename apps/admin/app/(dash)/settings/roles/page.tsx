@@ -49,14 +49,12 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/settings')} className="text-sm text-neutral-500 hover:text-neutral-700">← Settings</button>
-        <h1 className="font-semibold">Roles &amp; Permissions</h1>
-        <button onClick={() => setShowAdd(true)} className="ml-auto rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:opacity-90">+ Add role</button>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-8">
+    <div>
+      <main className="mx-auto max-w-4xl px-8 py-8">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Roles &amp; Permissions</h1>
+          <button onClick={() => setShowAdd(true)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">+ Add role</button>
+        </div>
         <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-xs font-semibold uppercase text-neutral-500 tracking-wide">

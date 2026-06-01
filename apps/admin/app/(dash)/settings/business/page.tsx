@@ -92,13 +92,9 @@ export default function BusinessSettingsPage() {
   const Saved = ({ id }: { id: string }) => savedMsg === id ? <span className="ml-2 text-xs text-green-600">✓ Saved</span> : null;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/settings')} className="text-sm text-neutral-500 hover:text-neutral-700">← Settings</button>
-        <h1 className="font-semibold">Business Settings</h1>
-      </header>
-
-      <main className="mx-auto max-w-3xl px-6 py-8 space-y-6">
+    <div>
+      <main className="mx-auto max-w-3xl px-8 py-8 space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight">Business Settings</h1>
         {/* Business Info */}
         <section className="rounded-xl border bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4"><h2 className="font-semibold">Business Info <Saved id="info" /></h2>

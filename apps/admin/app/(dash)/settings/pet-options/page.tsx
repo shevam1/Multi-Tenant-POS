@@ -68,26 +68,25 @@ export default function PetOptionsPage() {
   if (loading) return <div className="p-8 text-sm text-neutral-400">Loading…</div>;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/settings')} className="text-sm text-neutral-500 hover:text-neutral-700">← Settings</button>
-        <h1 className="font-semibold">Pet Options</h1>
-        {!canEdit && <span className="text-xs text-neutral-400">Read-only</span>}
-      </header>
+    <div className="mx-auto max-w-3xl px-8 py-8">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Pet Options</h1>
+        {!canEdit && <span className="text-xs text-muted-foreground">Read-only</span>}
+      </div>
 
       {/* Tabs */}
-      <div className="border-b bg-white px-6 overflow-x-auto">
+      <div className="mb-4 overflow-x-auto border-b">
         <div className="flex gap-1">
           {TABS.map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition ${tab === key ? 'border-amber-400 text-neutral-900' : 'border-transparent text-neutral-500 hover:text-neutral-700'}`}>
-              {label} <span className="text-xs text-neutral-400">{(data[key] ?? []).filter(o => !o.parentId).length}</span>
+              className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition ${tab === key ? 'border-amber-accent text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+              {label} <span className="text-xs text-muted-foreground">{(data[key] ?? []).filter(o => !o.parentId).length}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <main className="mx-auto max-w-3xl px-6 py-6 space-y-4">
+      <main className="space-y-4">
         {tab === 'VACCINE' && <VaccineAlertBanner data={data} />}
 
         <div className="rounded-xl border bg-white shadow-sm divide-y">
