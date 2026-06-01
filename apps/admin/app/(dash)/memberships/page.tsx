@@ -81,13 +81,9 @@ export default function MembershipsPage() {
   if (loading) return <div className="p-8 text-sm text-neutral-400">Loading…</div>;
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/dashboard')} className="text-sm text-neutral-500 hover:text-neutral-700">← Dashboard</button>
-        <h1 className="font-semibold">Membership & Loyalty</h1>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-8 space-y-8">
+    <div>
+      <main className="mx-auto max-w-5xl px-8 py-8 space-y-8">
+        <h1 className="text-2xl font-bold tracking-tight">Membership &amp; Loyalty</h1>
         {/* Plans */}
         <section>
           <h2 className="mb-3 font-semibold text-lg">Subscription tiers</h2>

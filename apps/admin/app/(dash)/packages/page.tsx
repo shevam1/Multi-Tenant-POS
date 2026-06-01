@@ -104,17 +104,15 @@ export default function PackagesPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center gap-3">
-        <button onClick={() => router.push('/settings')} className="text-sm text-neutral-500 hover:text-neutral-700">← Settings</button>
-        <h1 className="font-semibold">Services Catalog</h1>
-        <div className="ml-auto flex gap-2">
-          <button onClick={addCategory} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-neutral-50">+ Category</button>
-          <button onClick={() => setAddToCategory(UNCATEGORIZED)} className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:opacity-90">+ New item</button>
+    <div>
+      <main className="mx-auto max-w-4xl px-8 py-8 space-y-5">
+        <div className="mb-2 flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Services Catalog</h1>
+          <div className="ml-auto flex gap-2">
+            <button onClick={addCategory} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-secondary">+ Category</button>
+            <button onClick={() => setAddToCategory(UNCATEGORIZED)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">+ New item</button>
+          </div>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-6 py-8 space-y-5">
         {loading ? <p className="text-sm text-neutral-400">Loading…</p> : buckets.map((b, bi) => {
           const isOpen = !collapsed[b.id];
           return (
