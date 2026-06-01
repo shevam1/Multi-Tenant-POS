@@ -63,9 +63,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-background text-foreground">
         <Sidebar can={can} businessName={businessName} />
         <Topbar me={me} stores={stores} storeId={storeId} setStoreId={setStoreId} onSignOut={() => { localStorage.clear(); router.push('/login'); }} />
-        <main className="ml-64 pt-16 min-h-screen">
-          <div className="mx-auto max-w-7xl px-8 py-8">{children}</div>
-        </main>
+        {/* Pages own their container: padded screens use <PageBody>, full-bleed
+            screens (chat, POS) fill the area directly. */}
+        <main className="ml-64 pt-16 min-h-screen">{children}</main>
       </div>
     </Ctx.Provider>
   );

@@ -71,7 +71,7 @@ export default function DashboardPage() {
   const firstName = me.fullName.split(' ')[0];
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-8 py-8">
       {/* Page heading */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

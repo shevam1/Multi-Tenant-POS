@@ -62,7 +62,7 @@ export default function SettingsPage() {
   const can = (perm?: string) => !perm || me.permissions.includes(perm);
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-8 py-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings &amp; Configuration</h1>
         <p className="mt-1 text-sm text-muted-foreground">Manage your business configuration, staff, and preferences.</p>
